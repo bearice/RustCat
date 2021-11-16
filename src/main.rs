@@ -1,4 +1,4 @@
-// #![windows_subsystem = "windows"]
+#![cfg_attr(release, windows_subsystem = "windows")]
 
 use core::mem::MaybeUninit;
 use std::{

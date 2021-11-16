@@ -5,6 +5,10 @@ use winres::WindowsResource;
 fn main() -> io::Result<()> {
     #[cfg(windows)]
     {
+        let profile = std::env::var("PROFILE").unwrap();
+        if profile == "release" {
+            println!("cargo:rustc-cfg=release");
+        }
         let mut res = WindowsResource::new();
         // This path can be absolute, or relative to your crate root.
         res.set_icon("assets/appIcon.ico");
