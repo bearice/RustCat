@@ -8,15 +8,16 @@ use std::{
 };
 use trayicon::*;
 use winapi::um::winuser::{self};
+use winreg::RegKey;
 
 mod cpu_usage;
 #[allow(dead_code)]
 mod icons {
     include!(concat!(env!("OUT_DIR"), "/icons.rs"));
     use trayicon::*;
-    pub fn load_icons() -> Vec<Icon> {
-        DARK_CAT
-            .iter()
+    pub fn load_icons(dark: bool) -> Vec<Icon> {
+        let cats = if dark { DARK_CAT } else { LIGHT_CAT };
+        cats.iter()
             .map(|i| Icon::from_buffer(*i, None, None).unwrap())
             .collect()
     }
@@ -30,7 +31,7 @@ enum Events {
 fn main() {
     let (s, r) = std::sync::mpsc::channel::<Events>();
 
-    let icons = icons::load_icons();
+    let icons = icons::load_icons(is_dark_mode_enabled());
 
     let mut tray_icon = TrayIconBuilder::new()
         .sender(s)
@@ -99,5 +100,20 @@ fn main() {
                 break;
             }
         }
+    }
+}
+
+fn is_dark_mode_enabled() -> bool {
+    let hkcu = RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
+    if let Ok(subkey) =
+        hkcu.open_subkey("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize")
+    {
+        if let Ok(dword) = subkey.get_value::<u32, _>("AppsUseLightTheme") {
+            dword == 0
+        } else {
+            false
+        }
+    } else {
+        false
     }
 }
