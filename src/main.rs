@@ -46,16 +46,16 @@ fn main() {
     fn build_menu(icon_id: usize) -> MenuBuilder<Events> {
         MenuBuilder::new()
             .submenu(
-                "Theme",
+                "&Theme",
                 MenuBuilder::new()
-                    .checkable("D&ark", is_dark(icon_id), Events::ThemeDark)
-                    .checkable("L&ight", !is_dark(icon_id), Events::ThemeLight),
+                    .checkable("&Dark", is_dark(icon_id), Events::ThemeDark)
+                    .checkable("&Light", !is_dark(icon_id), Events::ThemeLight),
             )
             .submenu(
-                "Icon",
+                "&Icon",
                 MenuBuilder::new()
-                    .checkable("C&at", is_cat(icon_id), Events::IconCat)
-                    .checkable("P&arrot", !is_cat(icon_id), Events::IconParrot),
+                    .checkable("&Cat", is_cat(icon_id), Events::IconCat)
+                    .checkable("&Parrot", !is_cat(icon_id), Events::IconParrot),
             )
             .separator()
             .item("E&xit", Events::Exit)
