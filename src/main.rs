@@ -19,8 +19,8 @@ mod icons {
     include!(concat!(env!("OUT_DIR"), "/icons.rs"));
     use trayicon::*;
 
-    pub fn load_icons(id: u32) -> Vec<Icon> {
-        [DARK_CAT, LIGHT_CAT, DARK_PARROT, LIGHT_PARROT][id as usize]
+    pub fn load_icons(id: usize) -> Vec<Icon> {
+        [DARK_CAT, LIGHT_CAT, DARK_PARROT, LIGHT_PARROT][id]
             .iter()
             .map(|i| Icon::from_buffer(*i, None, None).unwrap())
             .collect()
@@ -62,7 +62,7 @@ fn main() {
     }
     let tray_icon = TrayIconBuilder::new()
         .sender(s)
-        .icon(icons[icon_id as usize][0].clone())
+        .icon(icons[icon_id][0].clone())
         .tooltip("Nyan~")
         .menu(build_menu(icon_id))
         .build()
