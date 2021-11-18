@@ -15,3 +15,8 @@ features = ["processthreadsapi", "minwindef"]
 
 [build-dependencies]
 winres = "0.1"
+
+[package.metadata.winres]
+OriginalFilename = "rust_cat.exe"
+FileDescription = "💻 => 🐈😺😸😹😻😼😽🐈‍⬛"
+LegalCopyright = "Copyright © 2021 Bearice Ren <https://github.com/bearice/RustCat>"
