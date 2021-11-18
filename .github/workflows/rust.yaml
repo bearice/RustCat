@@ -34,16 +34,34 @@ jobs:
         with:
           command: build
           args: --workspace --all-targets --all-features --release
+      - name: Check for release
+        id: is-release
+        shell: bash
+        run: |
+          unset IS_RELEASE ; if [[ $GITHUB_REF =~ ^refs/tags/v[0-9].* ]]; then IS_RELEASE='true' ; fi
+          echo ::set-output name=IS_RELEASE::${IS_RELEASE}
+      - name: Artifact Hash
+        id: package
+        shell: bash
+        run: |
+          md5sum target/release/rust_cat.exe >> hashes.txt
+          sha256sum target/release/rust_cat.exe >> hashes.txt
       - name: Artifact upload
         uses: actions/upload-artifact@master
         with:
           name: rust_cat.exe
           path: target/release/rust_cat.exe
-      - uses: MCJack123/ghaction-generate-release-hashes@v1
-        with:
-          hash-type: sha1
-          file-name: hashes.txt
-      - uses: actions/upload-artifact@master
+      - name: Hash upload
+        uses: actions/upload-artifact@master
         with:
           name: Asset Hashes
           path: hashes.txt
+      - name: Publish archives and packages
+        uses: softprops/action-gh-release@v1
+        if: steps.is-release.outputs.IS_RELEASE
+        with:
+          files: |
+            target/release/rust_cat.exe
+            hashes.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
