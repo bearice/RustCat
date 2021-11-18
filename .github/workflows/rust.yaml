@@ -13,7 +13,7 @@ jobs:
   #run build first to populate caches
   build:
     name: Build binary
-    runs-on: windows-2016
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions/cache@v2
@@ -54,7 +54,7 @@ jobs:
       - name: Hash upload
         uses: actions/upload-artifact@master
         with:
-          name: Asset Hashes
+          name: hashes.txt
           path: hashes.txt
       - name: Publish archives and packages
         uses: softprops/action-gh-release@v1
