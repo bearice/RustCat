@@ -46,6 +46,7 @@ jobs:
         run: |
           md5sum target/release/rust_cat.exe >> hashes.txt
           sha256sum target/release/rust_cat.exe >> hashes.txt
+          cat hashes.txt
       - name: Artifact upload
         uses: actions/upload-artifact@master
         with:
