@@ -60,6 +60,19 @@ fn main() {
             .separator()
             .item("E&xit", Events::Exit)
     }
+
+    std::panic::set_hook(Box::new(|e| {
+        let msg = format!("Panic: {}", e);
+        unsafe {
+            winuser::MessageBoxA(
+                winuser::HWND_DESKTOP,
+                msg.as_ptr() as _,
+                "RustCat Error".as_ptr() as _,
+                winuser::MB_OK,
+            );
+        }
+    }));
+
     let tray_icon = TrayIconBuilder::new()
         .sender(s)
         .icon(icons[icon_id][0].clone())
@@ -120,7 +133,9 @@ fn main() {
                         .lock()
                         .unwrap()
                         .set_icon(&icons[icon_index])
-                        .expect("set_icon");
+                        .map_err(|e| println!("set_icon error: {:?}", e))
+                        .unwrap_or(());
+                    //set_icon call may fail if pc goes into sleep mode, just ignore them
                 }
                 animate_counter += sleep_interval;
                 if update_counter == 1000 {
@@ -134,7 +149,8 @@ fn main() {
                         .lock()
                         .unwrap()
                         .set_tooltip(&format!("CPU Usage: {:.2}%", usage))
-                        .expect("set_tooltip");
+                        .map_err(|e| println!("set_tooltip error: {:?}", e))
+                        .unwrap_or(());
                 }
                 update_counter += sleep_interval;
             }
