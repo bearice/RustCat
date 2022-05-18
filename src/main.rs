@@ -34,6 +34,8 @@ enum Events {
     ThemeLight,
     IconCat,
     IconParrot,
+pub fn wchar(string: &str) -> Vec<u16> {
+    format!("{}\0", string).encode_utf16().collect::<Vec<_>>()
 }
 
 fn main() {
@@ -64,10 +66,10 @@ fn main() {
     std::panic::set_hook(Box::new(|e| {
         let msg = format!("Panic: {}", e);
         unsafe {
-            winuser::MessageBoxA(
+            winuser::MessageBoxW(
                 winuser::HWND_DESKTOP,
                 msg.as_ptr() as _,
-                "RustCat Error".as_ptr() as _,
+                wchar("RustCat Error").as_ptr() as _,
                 winuser::MB_OK,
             );
         }
