@@ -10,7 +10,10 @@ use std::{
     time::Duration,
 };
 use trayicon::*;
-use winapi::um::winuser::{self};
+use winapi::um::{
+    shellapi::{self},
+    winuser::{self},
+};
 use winreg::RegKey;
 
 mod cpu_usage;
@@ -34,6 +37,9 @@ enum Events {
     ThemeLight,
     IconCat,
     IconParrot,
+    RunTaskmgr,
+}
+
 pub fn wchar(string: &str) -> Vec<u16> {
     format!("{}\0", string).encode_utf16().collect::<Vec<_>>()
 }
@@ -80,6 +86,7 @@ fn main() {
         .icon(icons[icon_id][0].clone())
         .tooltip("Nyan~")
         .menu(build_menu(icon_id))
+        .on_double_click(Events::RunTaskmgr)
         .build()
         .unwrap();
 
@@ -106,6 +113,25 @@ fn main() {
                         exit.store(true, Ordering::Relaxed);
                         break;
                     }
+                    Events::RunTaskmgr => unsafe {
+                        let ret = shellapi::ShellExecuteW(
+                            winuser::HWND_DESKTOP,
+                            std::ptr::null(),
+                            wchar("taskmgr.exe").as_ptr() as _,
+                            std::ptr::null(),
+                            std::ptr::null(),
+                            winuser::SW_SHOWNORMAL,
+                        ) as usize;
+                        if ret < 32 {
+                            let msg = format!("ShellExecute failed: {}", ret);
+                            winuser::MessageBoxW(
+                                winuser::HWND_DESKTOP,
+                                wchar(&msg).as_ptr() as _,
+                                wchar("RustCat Error").as_ptr() as _,
+                                winuser::MB_OK,
+                            );
+                        }
+                    },
                     Events::ThemeDark => update_icon(icon_id.load(Ordering::Relaxed) & 2),
                     Events::ThemeLight => update_icon(icon_id.load(Ordering::Relaxed) | 1),
                     Events::IconCat => update_icon(icon_id.load(Ordering::Relaxed) & 1),
