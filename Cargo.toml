@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 trayicon = "0.1.3"
-winreg = "0.8.0"
+winreg = "0.10.1"
 
 [dependencies.winapi]
 version = "0.3"
