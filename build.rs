@@ -1,35 +1,35 @@
 use std::{io, path::Path};
-#[cfg(windows)]
 use winres::WindowsResource;
 
 fn main() -> io::Result<()> {
-    #[cfg(windows)]
-    {
-        let profile = std::env::var("PROFILE").unwrap();
-        if profile == "release" {
-            println!("cargo:rustc-cfg=release");
+    // Get Git commit hash
+    let output = std::process::Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output();
+
+    match output {
+        Ok(output) if output.status.success() => {
+            let git_hash = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !git_hash.is_empty() {
+                println!("cargo:rustc-env=GIT_HASH={}", git_hash);
+            } else {
+                println!("cargo:rustc-env=GIT_HASH=N/A");
+            }
         }
-        let mut res = WindowsResource::new();
-        // This path can be absolute, or relative to your crate root.
-        res.set_icon("assets/appIcon.ico");
-
-        // for entry in WalkDir::new("assets/cat")
-        //     .into_iter()
-        //     .chain(WalkDir::new("assets/parrot").into_iter())
-        // {
-        //     let entry = entry?;
-        //     if !entry.file_type().is_file() {
-        //         continue;
-        //     }
-        //     let path = entry.path().display().to_string();
-        //     let name = entry.file_name().to_string_lossy().to_string();
-        //     if name.ends_with(".ico") {
-        //         res.set_icon_with_id(path.as_str(), name.as_str());
-        //     }
-        // }
-
-        res.compile()?;
+        _ => {
+            println!("cargo:rustc-env=GIT_HASH=N/A");
+        }
     }
+
+    let profile = std::env::var("PROFILE").unwrap();
+    if profile == "release" {
+        println!("cargo:rustc-cfg=release");
+    }
+    let mut res = WindowsResource::new();
+    // This path can be absolute, or relative to your crate root.
+    res.set_icon("assets/appIcon.ico");
+
+    res.compile()?;
     generate_icon_resources()?;
     Ok(())
 }

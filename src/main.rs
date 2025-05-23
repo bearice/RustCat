@@ -1,4 +1,4 @@
-#![cfg_attr(release, windows_subsystem = "windows")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use core::mem::MaybeUninit;
 use std::{
@@ -39,6 +39,7 @@ enum Events {
     IconParrot,
     RunTaskmgr,
     ToggleRunOnStart,
+    ShowAboutDialog,
 }
 
 pub fn wchar(string: &str) -> Vec<u16> {
@@ -68,7 +69,13 @@ fn main() {
                     .checkable("&Parrot", !is_cat(icon_id), Events::IconParrot),
             )
             .separator()
-            .checkable("&Run on Start", run_on_start_enabled, Events::ToggleRunOnStart)
+            .checkable(
+                "&Run on Start",
+                run_on_start_enabled,
+                Events::ToggleRunOnStart,
+            )
+            .separator()
+            .item("&About", Events::ShowAboutDialog)
             .separator()
             .item("E&xit", Events::Exit)
     }
@@ -150,6 +157,21 @@ fn main() {
                             .set_menu(&build_menu(icon_id.load(Ordering::Relaxed)))
                             .expect("set_menu for ToggleRunOnStart");
                     }
+                    Events::ShowAboutDialog => unsafe {
+                        let version = env!("CARGO_PKG_VERSION");
+                        let git_hash = option_env!("GIT_HASH").unwrap_or("N/A");
+                        let project_page = "https://github.com/bearice/RustCat"; // Hardcoded as per plan
+                        let message = format!(
+                            "RustCat version {} (Git: {})\nProject Page: {}",
+                            version, git_hash, project_page
+                        );
+                        winuser::MessageBoxW(
+                            winuser::HWND_DESKTOP,
+                            wchar(&message).as_ptr(),
+                            wchar("About RustCat").as_ptr(),
+                            winuser::MB_OK | winuser::MB_ICONINFORMATION,
+                        );
+                    },
                 }
             }
         });
@@ -217,11 +239,14 @@ fn main() {
 fn is_run_on_start_enabled() -> bool {
     use winreg::enums::*;
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    if let Ok(run_key) = hkcu.open_subkey_with_flags("Software\\Microsoft\\Windows\\CurrentVersion\\Run", KEY_READ) {
+    if let Ok(run_key) = hkcu.open_subkey_with_flags(
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        KEY_READ,
+    ) {
         // Attempt to get the value. The type of the value doesn't matter as much as its existence.
         // We expect it to be a String (REG_SZ) if it exists.
         if run_key.get_value::<String, _>("RustCat").is_ok() {
-            // Optionally, you could check if the value (path) is not empty, 
+            // Optionally, you could check if the value (path) is not empty,
             // but for simplicity, existence is enough.
             return true;
         }
@@ -254,7 +279,7 @@ fn set_run_on_start(enable: bool) {
                     }
                 }
             } else {
-                if let Err(e) = run_key.delete_value(VALUE_NAME) {
+                if let Err(_e) = run_key.delete_value(VALUE_NAME) {
                     // It's okay if the value doesn't exist when trying to delete.
                     // You might want to log this for debugging if it's unexpected.
                     // eprintln!("Failed to delete registry value '{}' (this may be okay if it didn't exist): {}", VALUE_NAME, e);
@@ -262,7 +287,10 @@ fn set_run_on_start(enable: bool) {
             }
         }
         Err(e) => {
-            eprintln!("Failed to open or create registry subkey '{}': {}", RUN_KEY_PATH, e);
+            eprintln!(
+                "Failed to open or create registry subkey '{}': {}",
+                RUN_KEY_PATH, e
+            );
         }
     }
 }
