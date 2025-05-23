@@ -38,6 +38,7 @@ enum Events {
     IconCat,
     IconParrot,
     RunTaskmgr,
+    ToggleRunOnStart,
 }
 
 pub fn wchar(string: &str) -> Vec<u16> {
@@ -52,6 +53,7 @@ fn main() {
         .map(icons::load_icons)
         .collect::<Vec<_>>();
     fn build_menu(icon_id: usize) -> MenuBuilder<Events> {
+        let run_on_start_enabled = is_run_on_start_enabled(); // Call internally
         MenuBuilder::new()
             .submenu(
                 "&Theme",
@@ -65,6 +67,8 @@ fn main() {
                     .checkable("&Cat", is_cat(icon_id), Events::IconCat)
                     .checkable("&Parrot", !is_cat(icon_id), Events::IconParrot),
             )
+            .separator()
+            .checkable(".&Run on Start", run_on_start_enabled, Events::ToggleRunOnStart) // Use internal state
             .separator()
             .item("E&xit", Events::Exit)
     }
@@ -136,6 +140,16 @@ fn main() {
                     Events::ThemeLight => update_icon(icon_id.load(Ordering::Relaxed) | 1),
                     Events::IconCat => update_icon(icon_id.load(Ordering::Relaxed) & 1),
                     Events::IconParrot => update_icon(icon_id.load(Ordering::Relaxed) | 2),
+                    Events::ToggleRunOnStart => {
+                        let current_state = is_run_on_start_enabled();
+                        set_run_on_start(!current_state);
+                        // new_run_on_start_state variable removed
+                        tray_icon
+                            .lock()
+                            .unwrap()
+                            .set_menu(&build_menu(icon_id.load(Ordering::Relaxed)))
+                            .expect("set_menu for ToggleRunOnStart");
+                    }
                 }
             }
         });
@@ -196,6 +210,59 @@ fn main() {
             } else {
                 break;
             }
+        }
+    }
+}
+
+fn is_run_on_start_enabled() -> bool {
+    use winreg::enums::*;
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    if let Ok(run_key) = hkcu.open_subkey_with_flags("Software\\Microsoft\\Windows\\CurrentVersion\\Run", KEY_READ) {
+        // Attempt to get the value. The type of the value doesn't matter as much as its existence.
+        // We expect it to be a String (REG_SZ) if it exists.
+        if run_key.get_value::<String, _>("RustCat").is_ok() {
+            // Optionally, you could check if the value (path) is not empty, 
+            // but for simplicity, existence is enough.
+            return true;
+        }
+    }
+    false
+}
+
+fn set_run_on_start(enable: bool) {
+    use std::env;
+    use winreg::enums::*;
+    use winreg::RegKey;
+
+    const RUN_KEY_PATH: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+    const VALUE_NAME: &str = "RustCat";
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+
+    match hkcu.open_subkey_with_flags(RUN_KEY_PATH, KEY_WRITE | KEY_READ) {
+        Ok(run_key) => {
+            if enable {
+                match env::current_exe() {
+                    Ok(exe_path) => {
+                        let exe_path_str = exe_path.to_string_lossy().to_string();
+                        if let Err(e) = run_key.set_value(VALUE_NAME, &exe_path_str) {
+                            eprintln!("Failed to set registry value '{}': {}", VALUE_NAME, e);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to get current executable path: {}", e);
+                    }
+                }
+            } else {
+                if let Err(e) = run_key.delete_value(VALUE_NAME) {
+                    // It's okay if the value doesn't exist when trying to delete.
+                    // You might want to log this for debugging if it's unexpected.
+                    // eprintln!("Failed to delete registry value '{}' (this may be okay if it didn't exist): {}", VALUE_NAME, e);
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to open or create registry subkey '{}': {}", RUN_KEY_PATH, e);
         }
     }
 }
