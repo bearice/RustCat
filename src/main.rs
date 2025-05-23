@@ -1,4 +1,4 @@
-#![cfg_attr(release, windows_subsystem = "windows")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use core::mem::MaybeUninit;
 use std::{
@@ -272,7 +272,7 @@ fn set_run_on_start(enable: bool) {
                     }
                 }
             } else {
-                if let Err(e) = run_key.delete_value(VALUE_NAME) {
+                if let Err(_e) = run_key.delete_value(VALUE_NAME) {
                     // It's okay if the value doesn't exist when trying to delete.
                     // You might want to log this for debugging if it's unexpected.
                     // eprintln!("Failed to delete registry value '{}' (this may be okay if it didn't exist): {}", VALUE_NAME, e);
