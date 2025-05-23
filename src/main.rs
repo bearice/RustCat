@@ -39,6 +39,7 @@ enum Events {
     IconParrot,
     RunTaskmgr,
     ToggleRunOnStart,
+    ShowAboutDialog,
 }
 
 pub fn wchar(string: &str) -> Vec<u16> {
@@ -69,6 +70,8 @@ fn main() {
             )
             .separator()
             .checkable("&Run on Start", run_on_start_enabled, Events::ToggleRunOnStart)
+            .separator()
+            .item("&About", Events::ShowAboutDialog)
             .separator()
             .item("E&xit", Events::Exit)
     }
@@ -150,6 +153,21 @@ fn main() {
                             .set_menu(&build_menu(icon_id.load(Ordering::Relaxed)))
                             .expect("set_menu for ToggleRunOnStart");
                     }
+                    Events::ShowAboutDialog => unsafe {
+                        let version = env!("CARGO_PKG_VERSION");
+                        let git_hash = option_env!("GIT_HASH").unwrap_or("N/A");
+                        let project_page = "https://github.com/bearice/RustCat"; // Hardcoded as per plan
+                        let message = format!(
+                            "RustCat version {} (Git: {})\nProject Page: {}",
+                            version, git_hash, project_page
+                        );
+                        winuser::MessageBoxW(
+                            winuser::HWND_DESKTOP,
+                            wchar(&message).as_ptr(),
+                            wchar("About RustCat").as_ptr(),
+                            winuser::MB_OK | winuser::MB_ICONINFORMATION,
+                        );
+                    },
                 }
             }
         });
