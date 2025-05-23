@@ -68,7 +68,7 @@ fn main() {
                     .checkable("&Parrot", !is_cat(icon_id), Events::IconParrot),
             )
             .separator()
-            .checkable(".&Run on Start", run_on_start_enabled, Events::ToggleRunOnStart) // Use internal state
+            .checkable("&Run on Start", run_on_start_enabled, Events::ToggleRunOnStart)
             .separator()
             .item("E&xit", Events::Exit)
     }
