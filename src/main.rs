@@ -69,7 +69,11 @@ fn main() {
                     .checkable("&Parrot", !is_cat(icon_id), Events::IconParrot),
             )
             .separator()
-            .checkable("&Run on Start", run_on_start_enabled, Events::ToggleRunOnStart)
+            .checkable(
+                "&Run on Start",
+                run_on_start_enabled,
+                Events::ToggleRunOnStart,
+            )
             .separator()
             .item("&About", Events::ShowAboutDialog)
             .separator()
@@ -235,11 +239,14 @@ fn main() {
 fn is_run_on_start_enabled() -> bool {
     use winreg::enums::*;
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    if let Ok(run_key) = hkcu.open_subkey_with_flags("Software\\Microsoft\\Windows\\CurrentVersion\\Run", KEY_READ) {
+    if let Ok(run_key) = hkcu.open_subkey_with_flags(
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        KEY_READ,
+    ) {
         // Attempt to get the value. The type of the value doesn't matter as much as its existence.
         // We expect it to be a String (REG_SZ) if it exists.
         if run_key.get_value::<String, _>("RustCat").is_ok() {
-            // Optionally, you could check if the value (path) is not empty, 
+            // Optionally, you could check if the value (path) is not empty,
             // but for simplicity, existence is enough.
             return true;
         }
@@ -280,7 +287,10 @@ fn set_run_on_start(enable: bool) {
             }
         }
         Err(e) => {
-            eprintln!("Failed to open or create registry subkey '{}': {}", RUN_KEY_PATH, e);
+            eprintln!(
+                "Failed to open or create registry subkey '{}': {}",
+                RUN_KEY_PATH, e
+            );
         }
     }
 }
