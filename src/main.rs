@@ -93,7 +93,9 @@ fn main() {
     }));
 
     let tray_icon = TrayIconBuilder::new()
-        .sender(s)
+        .sender(move |e: &Events| {
+            let _ = s.send(e.clone());
+        })
         .icon(icons[icon_id][0].clone())
         .tooltip("Nyan~")
         .menu(build_menu(icon_id))
