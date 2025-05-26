@@ -35,9 +35,9 @@ dependencies = [
 
 [[package]]
 name = "trayicon"
-version = "0.1.3"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c367fd7cdcdf19234aa104f7e03abe1be526018e4282af9f275bf436b9c9ad23"
+checksum = "c51617694e059fe4b83ab48e435660c1ba5b48b1573b4c143fdabd1c0f279daa"
 dependencies = [
  "winapi",
 ]
