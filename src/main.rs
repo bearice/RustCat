@@ -209,7 +209,7 @@ fn main() {
             let mut t1 = match cpu_usage::get_cpu_totals() {
                 Ok(totals) => totals,
                 Err(e) => {
-                    println!("Failed to get initial CPU totals: {}", e);
+                    eprintln!("Failed to get initial CPU totals: {}", e);
                     return;
                 }
             };
@@ -228,7 +228,7 @@ fn main() {
                         .lock()
                         .unwrap()
                         .set_icon(&icons[icon_index])
-                        .map_err(|e| println!("set_icon error: {:?}", e))
+                        .map_err(|e| eprintln!("set_icon error: {:?}", e))
                         .unwrap_or(());
                     //set_icon call may fail if pc goes into sleep mode, just ignore them
                 }
@@ -238,7 +238,7 @@ fn main() {
                     let t2 = match cpu_usage::get_cpu_totals() {
                         Ok(totals) => totals,
                         Err(e) => {
-                            println!("Failed to get CPU totals: {}", e);
+                            eprintln!("Failed to get CPU totals: {}", e);
                             continue;
                         }
                     };
@@ -250,7 +250,7 @@ fn main() {
                         .lock()
                         .unwrap()
                         .set_tooltip(&format!("CPU Usage: {:.2}%", usage))
-                        .map_err(|e| println!("set_tooltip error: {:?}", e))
+                        .map_err(|e| eprintln!("set_tooltip error: {:?}", e))
                         .unwrap_or(());
                 }
                 update_counter += sleep_interval;
