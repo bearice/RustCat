@@ -41,6 +41,7 @@ enum Events {
     RunTaskmgr,
     ToggleRunOnStart,
     ShowAboutDialog,
+    ShowMenu,
 }
 
 fn safe_message_box(message: &str, title: &str, flags: u32) -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -138,6 +139,7 @@ fn main() {
         .tooltip("Nyan~")
         .menu(build_menu(icon_id))
         .on_double_click(Events::RunTaskmgr)
+        .on_right_click(Events::ShowMenu)
         .build()
         .unwrap();
 
@@ -204,6 +206,9 @@ fn main() {
                         if let Err(err) = safe_message_box(&message, "About RustCat", (MB_OK | MB_ICONINFORMATION).0) {
                             eprintln!("Failed to show about dialog: {}", err);
                         }
+                    },
+                    Events::ShowMenu => {
+                        tray_icon.lock().unwrap().show_menu().unwrap();
                     },
                 }
             }
