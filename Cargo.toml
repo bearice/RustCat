@@ -9,9 +9,15 @@ edition = "2021"
 trayicon = "0.2.0"
 winreg = "0.55.0"
 
-[dependencies.winapi]
-version = "0.3"
-features = ["processthreadsapi", "minwindef"]
+[dependencies.windows]
+version = "0.58"
+features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Shell",
+    "Win32_System_Threading",
+    "Win32_System_SystemInformation"
+]
 
 [build-dependencies]
 winres = "0.1"

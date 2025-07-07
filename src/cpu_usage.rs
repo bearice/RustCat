@@ -1,14 +1,16 @@
 use std::io;
 
-use winapi::shared::minwindef::FILETIME;
-use winapi::um::processthreadsapi::GetSystemTimes;
+use windows::{
+    Win32::Foundation::FILETIME,
+    Win32::System::Threading::GetSystemTimes,
+};
 
 pub fn get_cpu_totals() -> io::Result<(f64, f64)> {
     let mut idle_time = empty();
     let mut kernel_time = empty();
     let mut user_time = empty();
     unsafe {
-        if GetSystemTimes(&mut idle_time, &mut kernel_time, &mut user_time) == 0 {
+        if GetSystemTimes(Some(&mut idle_time), Some(&mut kernel_time), Some(&mut user_time)).is_err() {
             panic!("Error getting cpu usage");
         }
     }

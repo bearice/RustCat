@@ -1,6 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use core::mem::MaybeUninit;
 use std::{
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -10,9 +9,11 @@ use std::{
     time::Duration,
 };
 use trayicon::*;
-use winapi::um::{
-    shellapi::{self},
-    winuser::{self},
+use windows::{
+    core::*,
+    Win32::Foundation::HWND,
+    Win32::UI::Shell::*,
+    Win32::UI::WindowsAndMessaging::*,
 };
 use winreg::RegKey;
 
@@ -25,7 +26,7 @@ mod icons {
     pub fn load_icons(id: usize) -> Vec<Icon> {
         [DARK_CAT, LIGHT_CAT, DARK_PARROT, LIGHT_PARROT][id]
             .iter()
-            .map(|i| Icon::from_buffer(*i, None, None).unwrap())
+            .map(|i| Icon::from_buffer(i, None, None).unwrap())
             .collect()
     }
 }
@@ -42,15 +43,11 @@ enum Events {
     ShowAboutDialog,
 }
 
-pub fn wchar(string: &str) -> Vec<u16> {
-    format!("{}\0", string).encode_utf16().collect::<Vec<_>>()
-}
 
 fn main() {
     let (s, r) = std::sync::mpsc::channel::<Events>();
     let icon_id = get_icon_id();
     let icons = (0..4)
-        .into_iter()
         .map(icons::load_icons)
         .collect::<Vec<_>>();
     fn build_menu(icon_id: usize) -> MenuBuilder<Events> {
@@ -83,18 +80,18 @@ fn main() {
     std::panic::set_hook(Box::new(|e| {
         let msg = format!("Panic: {}", e);
         unsafe {
-            winuser::MessageBoxW(
-                winuser::HWND_DESKTOP,
-                msg.as_ptr() as _,
-                wchar("RustCat Error").as_ptr() as _,
-                winuser::MB_OK,
+            let _ = MessageBoxW(
+                HWND::default(),
+                &HSTRING::from(&msg),
+                &HSTRING::from("RustCat Error"),
+                MB_OK,
             );
         }
     }));
 
     let tray_icon = TrayIconBuilder::new()
         .sender(move |e: &Events| {
-            let _ = s.send(e.clone());
+            let _ = s.send(*e);
         })
         .icon(icons[icon_id][0].clone())
         .tooltip("Nyan~")
@@ -127,21 +124,21 @@ fn main() {
                         break;
                     }
                     Events::RunTaskmgr => unsafe {
-                        let ret = shellapi::ShellExecuteW(
-                            winuser::HWND_DESKTOP,
-                            std::ptr::null(),
-                            wchar("taskmgr.exe").as_ptr() as _,
-                            std::ptr::null(),
-                            std::ptr::null(),
-                            winuser::SW_SHOWNORMAL,
-                        ) as usize;
-                        if ret < 32 {
-                            let msg = format!("ShellExecute failed: {}", ret);
-                            winuser::MessageBoxW(
-                                winuser::HWND_DESKTOP,
-                                wchar(&msg).as_ptr() as _,
-                                wchar("RustCat Error").as_ptr() as _,
-                                winuser::MB_OK,
+                        let ret = ShellExecuteW(
+                            HWND::default(),
+                            None,
+                            &HSTRING::from("taskmgr.exe"),
+                            None,
+                            None,
+                            SW_SHOWNORMAL,
+                        );
+                        if ret.0 as usize <= 32 {
+                            let msg = format!("ShellExecute failed: {}", ret.0 as usize);
+                            let _ = MessageBoxW(
+                                HWND::default(),
+                                &HSTRING::from(&msg),
+                                &HSTRING::from("RustCat Error"),
+                                MB_OK,
                             );
                         }
                     },
@@ -162,16 +159,16 @@ fn main() {
                     Events::ShowAboutDialog => unsafe {
                         let version = env!("CARGO_PKG_VERSION");
                         let git_hash = option_env!("GIT_HASH").unwrap_or("N/A");
-                        let project_page = "https://github.com/bearice/RustCat"; // Hardcoded as per plan
+                        let project_page = "https://github.com/bearice/RustCat";
                         let message = format!(
                             "RustCat version {} (Git: {})\nProject Page: {}",
                             version, git_hash, project_page
                         );
-                        winuser::MessageBoxW(
-                            winuser::HWND_DESKTOP,
-                            wchar(&message).as_ptr(),
-                            wchar("About RustCat").as_ptr(),
-                            winuser::MB_OK | winuser::MB_ICONINFORMATION,
+                        let _ = MessageBoxW(
+                            HWND::default(),
+                            &HSTRING::from(&message),
+                            &HSTRING::from("About RustCat"),
+                            MB_OK | MB_ICONINFORMATION,
                         );
                     },
                 }
@@ -209,7 +206,7 @@ fn main() {
                     let t2 = cpu_usage::get_cpu_totals().unwrap();
                     let usage = 100.0 - (t2.1 - t1.1) / (t2.0 - t1.0) * 100.0;
                     t1 = t2;
-                    speed = (200.0 / f64::max(1.0, f64::min(20.0, usage / 5.0))).round() as u64;
+                    speed = (200.0 / (usage / 5.0).clamp(1.0, 20.0)).round() as u64;
                     println!("CPU Usage: {:.2}% speed: {}", usage, speed);
                     tray_icon
                         .lock()
@@ -222,15 +219,13 @@ fn main() {
             }
         });
     }
-    // Your applications message loop. Because all applications require an
-    // application loop, you are best served using an `winit` crate.
     while !exit.load(std::sync::atomic::Ordering::Relaxed) {
         unsafe {
-            let mut msg = MaybeUninit::uninit();
-            let bret = winuser::GetMessageA(msg.as_mut_ptr(), 0 as _, 0, 0);
-            if bret > 0 {
-                winuser::TranslateMessage(msg.as_ptr());
-                winuser::DispatchMessageA(msg.as_ptr());
+            let mut msg = std::mem::zeroed();
+            let bret = GetMessageA(&mut msg, None, 0, 0);
+            if bret.as_bool() {
+                let _ = TranslateMessage(&msg);
+                DispatchMessageA(&msg);
             } else {
                 break;
             }
@@ -280,12 +275,8 @@ fn set_run_on_start(enable: bool) {
                         eprintln!("Failed to get current executable path: {}", e);
                     }
                 }
-            } else {
-                if let Err(_e) = run_key.delete_value(VALUE_NAME) {
-                    // It's okay if the value doesn't exist when trying to delete.
-                    // You might want to log this for debugging if it's unexpected.
-                    // eprintln!("Failed to delete registry value '{}' (this may be okay if it didn't exist): {}", VALUE_NAME, e);
-                }
+            } else if let Err(e) = run_key.delete_value(VALUE_NAME) {
+                eprintln!("Failed to delete registry value '{}' (this may be okay if it didn't exist): {}", VALUE_NAME, e);
             }
         }
         Err(e) => {
