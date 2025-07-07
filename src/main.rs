@@ -7,22 +7,16 @@ mod events;
 mod settings;
 mod windows_api;
 mod app;
+mod icon_manager;
 
 #[allow(dead_code)]
-mod icons {
+mod icon_data {
     include!(concat!(env!("OUT_DIR"), "/icons.rs"));
-    use trayicon::*;
-
-    pub fn load_icons(id: usize) -> Vec<Icon> {
-        [DARK_CAT, LIGHT_CAT, DARK_PARROT, LIGHT_PARROT][id]
-            .iter()
-            .map(|i| Icon::from_buffer(i, None, None).unwrap())
-            .collect()
-    }
 }
 
 use crate::{
     app::App,
+    icon_manager::IconManager,
     settings::get_icon_id,
     windows_api::safe_message_box,
 };
@@ -31,9 +25,7 @@ use crate::{
 
 fn main() {
     let icon_id = get_icon_id();
-    let icons = (0..4)
-        .map(icons::load_icons)
-        .collect::<Vec<_>>();
+    let icon_manager = IconManager::load_icons().expect("Failed to load icons");
 
     std::panic::set_hook(Box::new(|e| {
         let msg = format!("Panic: {}", e);
@@ -42,7 +34,7 @@ fn main() {
         }
     }));
 
-    let app = App::new(icons, icon_id).expect("Failed to create app");
+    let app = App::new(icon_manager, icon_id).expect("Failed to create app");
     
     app.start_animation_thread();
     

@@ -12,6 +12,7 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 use crate::{
     cpu_usage,
     events::{Events, build_menu},
+    icon_manager::IconManager,
     settings::{set_icon_id, is_run_on_start_enabled, set_run_on_start},
     windows_api::{safe_message_box, safe_shell_execute, safe_message_loop},
 };
@@ -20,18 +21,21 @@ pub struct App {
     pub tray_icon: Arc<Mutex<TrayIcon<Events>>>,
     pub icon_id: Arc<AtomicUsize>,
     pub exit: Arc<AtomicBool>,
-    pub icons: Arc<Vec<Vec<Icon>>>,
+    pub icon_manager: Arc<IconManager>,
 }
 
 impl App {
-    pub fn new(icons: Vec<Vec<Icon>>, initial_icon_id: usize) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(icon_manager: IconManager, initial_icon_id: usize) -> Result<Self, Box<dyn std::error::Error>> {
         let (s, r) = std::sync::mpsc::channel::<Events>();
+        
+        let initial_icons = icon_manager.get_icon_set_by_numeric_id(initial_icon_id)
+            .ok_or("Invalid initial icon ID")?;
         
         let tray_icon = TrayIconBuilder::new()
             .sender(move |e: &Events| {
                 let _ = s.send(*e);
             })
-            .icon(icons[initial_icon_id][0].clone())
+            .icon(initial_icons[0].clone())
             .tooltip("Nyan~")
             .menu(build_menu(initial_icon_id))
             .on_double_click(Events::RunTaskmgr)
@@ -41,12 +45,13 @@ impl App {
         let icon_id = Arc::new(AtomicUsize::new(initial_icon_id));
         let exit = Arc::new(AtomicBool::new(false));
         let tray_icon = Arc::new(Mutex::new(tray_icon));
-        let icons = Arc::new(icons);
+        let icon_manager = Arc::new(icon_manager);
+        
         let app = App {
             tray_icon,
             icon_id,
             exit,
-            icons,
+            icon_manager,
         };
 
         app.start_event_thread(r);
@@ -123,7 +128,7 @@ impl App {
         let exit = self.exit.clone();
         let icon_id = self.icon_id.clone();
         let tray_icon = self.tray_icon.clone();
-        let icons = self.icons.clone();
+        let icon_manager = self.icon_manager.clone();
                 
         std::thread::spawn(move || {
             let sleep_interval = 10;
@@ -141,7 +146,14 @@ impl App {
             
             while !exit.load(Ordering::Relaxed) {
                 sleep(Duration::from_millis(sleep_interval));
-                let icons = &icons[icon_id.load(Ordering::Relaxed)];
+                let current_icon_id = icon_id.load(Ordering::Relaxed);
+                let icons = match icon_manager.get_icon_set_by_numeric_id(current_icon_id) {
+                    Some(icons) => icons,
+                    None => {
+                        eprintln!("Invalid icon ID: {}", current_icon_id);
+                        continue;
+                    }
+                };
                 
                 if animate_counter >= speed {
                     animate_counter = 0;
