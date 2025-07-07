@@ -6,7 +6,7 @@ use std::{
         Arc, Mutex,
     },
     thread::sleep,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use trayicon::*;
 use windows::{
@@ -144,11 +144,15 @@ fn main() {
     let icon_id = Arc::new(AtomicUsize::new(icon_id));
     let exit = Arc::new(AtomicBool::new(false));
     let tray_icon = Arc::new(Mutex::new(tray_icon));
+    
+    // Store thread handles for graceful shutdown
+    let mut thread_handles = Vec::new();
+    
     {
         let exit = exit.clone();
         let icon_id = icon_id.clone();
         let tray_icon = tray_icon.clone();
-        std::thread::spawn(move || {
+        let event_thread = std::thread::spawn(move || {
             let update_icon = |id| {
                 set_icon_id(id);
                 icon_id.store(id, Ordering::Relaxed);
@@ -162,6 +166,10 @@ fn main() {
                 match m {
                     Events::Exit => {
                         exit.store(true, Ordering::Relaxed);
+                        // Post quit message to main thread's message loop
+                        unsafe {
+                            PostQuitMessage(0);
+                        }
                         break;
                     }
                     Events::RunTaskmgr => {
@@ -200,11 +208,12 @@ fn main() {
                 }
             }
         });
+        thread_handles.push(event_thread);
     }
 
     {
         let exit = exit.clone();
-        std::thread::spawn(move || {
+        let cpu_thread = std::thread::spawn(move || {
             let sleep_interval = 10;
             let mut t1 = match cpu_usage::get_cpu_totals() {
                 Ok(totals) => totals,
@@ -256,7 +265,9 @@ fn main() {
                 update_counter += sleep_interval;
             }
         });
+        thread_handles.push(cpu_thread);
     }
+    // Main message loop
     while !exit.load(std::sync::atomic::Ordering::Relaxed) {
         match safe_message_loop() {
             Ok(()) => continue,
@@ -267,6 +278,33 @@ fn main() {
                     eprintln!("Message loop error: {}", err);
                     break;
                 }
+            }
+        }
+    }
+    
+    // Signal all threads to exit
+    exit.store(true, std::sync::atomic::Ordering::Relaxed);
+    
+    // Wait for all threads to finish gracefully with timeout
+    let shutdown_timeout = Duration::from_secs(5);
+    let shutdown_start = Instant::now();
+    
+    for (i, handle) in thread_handles.into_iter().enumerate() {
+        let remaining_time = shutdown_timeout.saturating_sub(shutdown_start.elapsed());
+        
+        if remaining_time.is_zero() {
+            eprintln!("Shutdown timeout reached, some threads may not have finished cleanly");
+            break;
+        }
+        
+        // For simplicity, we'll just join immediately since Rust's thread::join doesn't support timeout
+        // In a more complex implementation, we could use a separate monitoring thread
+        match handle.join() {
+            Ok(()) => {
+                // Thread finished successfully
+            }
+            Err(e) => {
+                eprintln!("Thread {} panicked during shutdown: {:?}", i, e);
             }
         }
     }
