@@ -45,6 +45,7 @@ impl IconManager {
         let mut manager = Self::new();
         
         // Define icon configurations: (base_name, supports_themes, [(theme, icon_data)])
+        // Adding new icons is as simple as adding a new entry here!
         let icon_configs = [
             ("cat", true, vec![
                 (Theme::Dark, crate::icon_data::DARK_CAT),
@@ -54,6 +55,12 @@ impl IconManager {
                 (Theme::Dark, crate::icon_data::DARK_PARROT),
                 (Theme::Light, crate::icon_data::LIGHT_PARROT),
             ]),
+            // Example: to add a new "dog" icon, just add:
+            // ("dog", true, vec![
+            //     (Theme::Dark, crate::icon_data::DARK_DOG),
+            //     (Theme::Light, crate::icon_data::LIGHT_DOG),
+            // ]),
+            // The menu system will automatically detect it and add it to the menu!
         ];
         
         for (base_name, supports_themes, theme_data) in icon_configs.iter() {
@@ -91,10 +98,6 @@ impl IconManager {
                 icon_map.values().next() // Single theme icon
             }
         }
-    }
-    
-    pub fn get_icon_set_auto(&self, icon_name: &str) -> Option<&Vec<Icon>> {
-        self.get_icon_set(icon_name, None)
     }
     
     pub fn supports_themes(&self, icon_name: &str) -> bool {
@@ -136,21 +139,6 @@ impl IconManager {
         if is_dark { Theme::Dark } else { Theme::Light }
     }
     
-    // Backward compatibility - get icon set by old numeric ID
-    pub fn get_icon_set_by_numeric_id(&self, old_id: usize) -> Option<&Vec<Icon>> {
-        let icon_name = Self::migrate_from_numeric_id(old_id);
-        let theme = Self::get_theme_from_numeric_id(old_id);
-        self.get_icon_set(&icon_name, Some(theme))
-    }
-    
-    // Helper methods for backward compatibility
-    pub fn is_dark_theme_numeric(id: usize) -> bool {
-        (id & 1) == 0
-    }
-    
-    pub fn is_cat_type_numeric(id: usize) -> bool {
-        (id & 2) == 0
-    }
 }
 
 impl Default for IconManager {

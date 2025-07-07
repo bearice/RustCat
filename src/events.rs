@@ -1,34 +1,56 @@
 use trayicon::MenuBuilder;
-use crate::settings::{is_run_on_start_enabled, is_dark, is_cat};
+use crate::settings::{is_run_on_start_enabled, get_current_icon, get_current_theme};
+use crate::icon_manager::{Theme, IconManager};
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum Events {
     Exit,
-    ThemeDark,
-    ThemeLight,
-    IconCat,
-    IconParrot,
+    SetTheme(Theme),
+    SetIcon(String),
     RunTaskmgr,
     ToggleRunOnStart,
     ShowAboutDialog,
     ShowMenu,
 }
 
-pub fn build_menu(icon_id: usize) -> MenuBuilder<Events> {
+pub fn build_menu(icon_manager: &IconManager) -> MenuBuilder<Events> {
     let run_on_start_enabled = is_run_on_start_enabled();
-    MenuBuilder::new()
-        .submenu(
-            "&Theme",
-            MenuBuilder::new()
-                .checkable("&Dark", is_dark(icon_id), Events::ThemeDark)
-                .checkable("&Light", !is_dark(icon_id), Events::ThemeLight),
-        )
-        .submenu(
-            "&Icon",
-            MenuBuilder::new()
-                .checkable("&Cat", is_cat(icon_id), Events::IconCat)
-                .checkable("&Parrot", !is_cat(icon_id), Events::IconParrot),
-        )
+    let current_icon = get_current_icon();
+    let current_theme = get_current_theme();
+    
+    let mut menu = MenuBuilder::new();
+    
+    // Build theme submenu - only show if current icon supports themes
+    if icon_manager.supports_themes(&current_icon) {
+        let available_themes = icon_manager.available_themes_for_icon(&current_icon);
+        if !available_themes.is_empty() {
+            let mut theme_menu = MenuBuilder::new();
+            for theme in available_themes {
+                let theme_name = match theme {
+                    Theme::Dark => "&Dark",
+                    Theme::Light => "&Light",
+                };
+                let is_current = current_theme == theme;
+                theme_menu = theme_menu.checkable(theme_name, is_current, Events::SetTheme(theme));
+            }
+            menu = menu.submenu("&Theme", theme_menu);
+        }
+    }
+    
+    // Build icon submenu - dynamically from available icons
+    let available_icons = icon_manager.available_icons();
+    if available_icons.len() > 1 {
+        let mut icon_menu = MenuBuilder::new();
+        for icon_name in available_icons {
+            let is_current = current_icon == icon_name;
+            // Capitalize first letter for display
+            let display_name = format!("&{}", icon_name.chars().next().unwrap().to_uppercase().collect::<String>() + &icon_name[1..]);
+            icon_menu = icon_menu.checkable(&display_name, is_current, Events::SetIcon(icon_name));
+        }
+        menu = menu.submenu("&Icon", icon_menu);
+    }
+    
+    menu
         .separator()
         .checkable(
             "&Run on Start",

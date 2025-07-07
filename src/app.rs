@@ -1,6 +1,6 @@
 use std::{
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
     thread::sleep,
@@ -13,43 +13,40 @@ use crate::{
     cpu_usage,
     events::{Events, build_menu},
     icon_manager::IconManager,
-    settings::{set_icon_id, is_run_on_start_enabled, set_run_on_start},
+    settings::{set_current_icon, set_current_theme, get_current_icon, get_current_theme, is_run_on_start_enabled, set_run_on_start},
     windows_api::{safe_message_box, safe_shell_execute, safe_message_loop},
 };
 
 pub struct App {
     pub tray_icon: Arc<Mutex<TrayIcon<Events>>>,
-    pub icon_id: Arc<AtomicUsize>,
     pub exit: Arc<AtomicBool>,
     pub icon_manager: Arc<IconManager>,
 }
 
 impl App {
-    pub fn new(icon_manager: IconManager, initial_icon_id: usize) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(icon_manager: IconManager, icon_name: &str, theme: Option<crate::icon_manager::Theme>) -> Result<Self, Box<dyn std::error::Error>> {
         let (s, r) = std::sync::mpsc::channel::<Events>();
         
-        let initial_icons = icon_manager.get_icon_set_by_numeric_id(initial_icon_id)
-            .ok_or("Invalid initial icon ID")?;
+        let initial_icons = icon_manager.get_icon_set(icon_name, theme)
+            .ok_or("Invalid initial icon name")?;
         
         let tray_icon = TrayIconBuilder::new()
             .sender(move |e: &Events| {
-                let _ = s.send(*e);
+                let _ = s.send(e.clone());
             })
             .icon(initial_icons[0].clone())
             .tooltip("Nyan~")
-            .menu(build_menu(initial_icon_id))
+            .menu(build_menu(&icon_manager))
             .on_double_click(Events::RunTaskmgr)
             .on_right_click(Events::ShowMenu)
             .build()?;
 
-        let icon_id = Arc::new(AtomicUsize::new(initial_icon_id));
         let exit = Arc::new(AtomicBool::new(false));
         let tray_icon = Arc::new(Mutex::new(tray_icon));
         let icon_manager = Arc::new(icon_manager);
         
         let app = App {
             tray_icon,
-            icon_id,
             exit,
             icon_manager,
         };
@@ -61,17 +58,15 @@ impl App {
 
     pub fn start_event_thread(&self, receiver: std::sync::mpsc::Receiver<Events>) {
         let exit = self.exit.clone();
-        let icon_id = self.icon_id.clone();
         let tray_icon = self.tray_icon.clone();
+        let icon_manager = self.icon_manager.clone();
         
         std::thread::spawn(move || {
-            let update_icon = |id| {
-                set_icon_id(id);
-                icon_id.store(id, Ordering::Relaxed);
+            let update_menu = || {
                 tray_icon
                     .lock()
                     .unwrap()
-                    .set_menu(&build_menu(id))
+                    .set_menu(&build_menu(&icon_manager))
                     .expect("set_menu")
             };
             
@@ -91,18 +86,18 @@ impl App {
                             }
                         }
                     },
-                    Events::ThemeDark => update_icon(icon_id.load(Ordering::Relaxed) & 2),
-                    Events::ThemeLight => update_icon(icon_id.load(Ordering::Relaxed) | 1),
-                    Events::IconCat => update_icon(icon_id.load(Ordering::Relaxed) & 1),
-                    Events::IconParrot => update_icon(icon_id.load(Ordering::Relaxed) | 2),
+                    Events::SetTheme(theme) => {
+                        set_current_theme(Some(theme));
+                        update_menu();
+                    },
+                    Events::SetIcon(icon_name) => {
+                        set_current_icon(&icon_name);
+                        update_menu();
+                    },
                     Events::ToggleRunOnStart => {
                         let current_state = is_run_on_start_enabled();
                         set_run_on_start(!current_state);
-                        tray_icon
-                            .lock()
-                            .unwrap()
-                            .set_menu(&build_menu(icon_id.load(Ordering::Relaxed)))
-                            .expect("set_menu for ToggleRunOnStart");
+                        update_menu();
                     }
                     Events::ShowAboutDialog => {
                         let version = env!("CARGO_PKG_VERSION");
@@ -126,7 +121,6 @@ impl App {
 
     pub fn start_animation_thread(&self) {
         let exit = self.exit.clone();
-        let icon_id = self.icon_id.clone();
         let tray_icon = self.tray_icon.clone();
         let icon_manager = self.icon_manager.clone();
                 
@@ -146,11 +140,12 @@ impl App {
             
             while !exit.load(Ordering::Relaxed) {
                 sleep(Duration::from_millis(sleep_interval));
-                let current_icon_id = icon_id.load(Ordering::Relaxed);
-                let icons = match icon_manager.get_icon_set_by_numeric_id(current_icon_id) {
+                let current_icon_name = get_current_icon();
+                let current_theme = get_current_theme();
+                let icons = match icon_manager.get_icon_set(&current_icon_name, Some(current_theme)) {
                     Some(icons) => icons,
                     None => {
-                        eprintln!("Invalid icon ID: {}", current_icon_id);
+                        eprintln!("Invalid icon name: {}", current_icon_name);
                         continue;
                     }
                 };

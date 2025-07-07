@@ -51,33 +51,36 @@ pub fn set_run_on_start(enable: bool) {
 
 use crate::icon_manager::{IconManager, Theme};
 
-// Backward compatibility functions for numeric IDs
-pub fn is_dark(id: usize) -> bool {
-    IconManager::is_dark_theme_numeric(id)
-}
-
-pub fn is_cat(id: usize) -> bool {
-    IconManager::is_cat_type_numeric(id)
+// One-time migration function to convert old numeric IDs to string-based system
+pub fn migrate_legacy_settings() {
+    let key = RegKey::predef(HKEY_CURRENT_USER);
+    if let Ok(sub_key) = key.open_subkey_with_flags("Software\\RustCat", KEY_READ) {
+        // Check if migration is needed
+        if let Ok(old_id) = sub_key.get_value::<u32, &str>("IconId") {
+            // Convert old numeric ID to new string-based system
+            let icon_name = IconManager::migrate_from_numeric_id(old_id as usize);
+            let theme = IconManager::get_theme_from_numeric_id(old_id as usize);
+            
+            // Save new settings
+            set_current_icon(&icon_name);
+            set_current_theme(Some(theme));
+            
+            // Remove old numeric ID
+            if let Ok(write_key) = key.open_subkey_with_flags("Software\\RustCat", KEY_WRITE) {
+                let _ = write_key.delete_value("IconId");
+            }
+            
+            println!("Migrated from legacy IconId {} to IconName: {}, Theme: {}", old_id, icon_name, theme);
+        }
+    }
 }
 
 // String-based icon ID functions
 pub fn get_current_icon() -> String {
     let key = RegKey::predef(HKEY_CURRENT_USER);
     if let Ok(sub_key) = key.open_subkey_with_flags("Software\\RustCat", KEY_READ) {
-        // Try to get string-based icon name first
         if let Ok(icon_name) = sub_key.get_value::<String, &str>("IconName") {
             return icon_name;
-        }
-        
-        // Migration: Check for old numeric IconId and convert
-        if let Ok(old_id) = sub_key.get_value::<u32, &str>("IconId") {
-            let migrated_name = IconManager::migrate_from_numeric_id(old_id as usize);
-            
-            // Save the migrated name and remove old numeric ID
-            set_current_icon(&migrated_name);
-            let _ = sub_key.delete_value("IconId"); // Ignore errors if already deleted
-            
-            return migrated_name;
         }
     }
     
@@ -109,21 +112,12 @@ pub fn set_current_icon(icon_name: &str) {
 pub fn get_current_theme() -> Theme {
     let key = RegKey::predef(HKEY_CURRENT_USER);
     if let Ok(sub_key) = key.open_subkey_with_flags("Software\\RustCat", KEY_READ) {
-        // Try to get explicit theme preference
         if let Ok(theme_str) = sub_key.get_value::<String, &str>("Theme") {
             match theme_str.as_str() {
                 "dark" => return Theme::Dark,
                 "light" => return Theme::Light,
                 _ => {} // Fall through to auto-detect
             }
-        }
-        
-        // Migration: Check for old numeric IconId theme
-        if let Ok(old_id) = sub_key.get_value::<u32, &str>("IconId") {
-            let theme = IconManager::get_theme_from_numeric_id(old_id as usize);
-            // Save the migrated theme
-            set_current_theme(Some(theme));
-            return theme;
         }
     }
     
@@ -160,34 +154,6 @@ pub fn set_current_theme(theme: Option<Theme>) {
     }
 }
 
-// Legacy functions for backward compatibility during transition
-pub fn get_icon_id() -> usize {
-    // Convert current string-based icon to old numeric format for compatibility
-    let icon_name = get_current_icon();
-    let theme = get_current_theme();
-    
-    let type_bit = match icon_name.as_str() {
-        "cat" => 0,
-        "parrot" => 2,
-        _ => 0, // Default to cat
-    };
-    
-    let theme_bit = match theme {
-        Theme::Dark => 0,
-        Theme::Light => 1,
-    };
-    
-    type_bit | theme_bit
-}
-
-pub fn set_icon_id(id: usize) {
-    // Convert old numeric ID to new string-based system
-    let icon_name = IconManager::migrate_from_numeric_id(id);
-    let theme = IconManager::get_theme_from_numeric_id(id);
-    
-    set_current_icon(&icon_name);
-    set_current_theme(Some(theme));
-}
 
 pub fn is_dark_mode_enabled() -> bool {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);

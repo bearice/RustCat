@@ -17,15 +17,22 @@ mod icon_data {
 use crate::{
     app::App,
     icon_manager::IconManager,
-    settings::get_icon_id,
+    settings::{migrate_legacy_settings, get_current_icon, get_current_theme},
     windows_api::safe_message_box,
 };
 
 
 
 fn main() {
-    let icon_id = get_icon_id();
+    // Migrate legacy settings if needed
+    migrate_legacy_settings();
+    
+    // Load icons
     let icon_manager = IconManager::load_icons().expect("Failed to load icons");
+    
+    // Get current icon and theme
+    let icon_name = get_current_icon();
+    let theme = get_current_theme();
 
     std::panic::set_hook(Box::new(|e| {
         let msg = format!("Panic: {}", e);
@@ -34,7 +41,7 @@ fn main() {
         }
     }));
 
-    let app = App::new(icon_manager, icon_id).expect("Failed to create app");
+    let app = App::new(icon_manager, &icon_name, Some(theme)).expect("Failed to create app");
     
     app.start_animation_thread();
     
