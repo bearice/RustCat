@@ -42,9 +42,9 @@ fn main() {
         }
     }));
 
-    let app = App::new(&icons, icon_id).expect("Failed to create app");
+    let app = App::new(icons, icon_id).expect("Failed to create app");
     
-    app.start_animation_thread(&icons);
+    app.start_animation_thread();
     
     app.run_message_loop();
     

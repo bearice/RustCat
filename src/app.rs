@@ -20,10 +20,11 @@ pub struct App {
     pub tray_icon: Arc<Mutex<TrayIcon<Events>>>,
     pub icon_id: Arc<AtomicUsize>,
     pub exit: Arc<AtomicBool>,
+    pub icons: Arc<Vec<Vec<Icon>>>,
 }
 
 impl App {
-    pub fn new(icons: &[Vec<Icon>], initial_icon_id: usize) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(icons: Vec<Vec<Icon>>, initial_icon_id: usize) -> Result<Self, Box<dyn std::error::Error>> {
         let (s, r) = std::sync::mpsc::channel::<Events>();
         
         let tray_icon = TrayIconBuilder::new()
@@ -40,11 +41,12 @@ impl App {
         let icon_id = Arc::new(AtomicUsize::new(initial_icon_id));
         let exit = Arc::new(AtomicBool::new(false));
         let tray_icon = Arc::new(Mutex::new(tray_icon));
-
+        let icons = Arc::new(icons);
         let app = App {
             tray_icon,
             icon_id,
             exit,
+            icons,
         };
 
         app.start_event_thread(r);
@@ -117,14 +119,12 @@ impl App {
         });
     }
 
-    pub fn start_animation_thread(&self, icons: &[Vec<Icon>]) {
+    pub fn start_animation_thread(&self) {
         let exit = self.exit.clone();
         let icon_id = self.icon_id.clone();
         let tray_icon = self.tray_icon.clone();
-        
-        // Clone the icons data to move into the thread
-        let icons_clone: Vec<Vec<Icon>> = icons.iter().map(|icon_set| icon_set.clone()).collect();
-        
+        let icons = self.icons.clone();
+                
         std::thread::spawn(move || {
             let sleep_interval = 10;
             let mut t1 = match cpu_usage::get_cpu_totals() {
@@ -141,7 +141,7 @@ impl App {
             
             while !exit.load(Ordering::Relaxed) {
                 sleep(Duration::from_millis(sleep_interval));
-                let icons = &icons_clone[icon_id.load(Ordering::Relaxed)];
+                let icons = &icons[icon_id.load(Ordering::Relaxed)];
                 
                 if animate_counter >= speed {
                     animate_counter = 0;
