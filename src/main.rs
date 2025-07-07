@@ -180,7 +180,13 @@ fn main() {
         let exit = exit.clone();
         std::thread::spawn(move || {
             let sleep_interval = 10;
-            let mut t1 = cpu_usage::get_cpu_totals().unwrap();
+            let mut t1 = match cpu_usage::get_cpu_totals() {
+                Ok(totals) => totals,
+                Err(e) => {
+                    println!("Failed to get initial CPU totals: {}", e);
+                    return;
+                }
+            };
             let mut update_counter = 0;
             let mut animate_counter = 0;
             let mut icon_index = 0;
@@ -203,7 +209,13 @@ fn main() {
                 animate_counter += sleep_interval;
                 if update_counter == 1000 {
                     update_counter = 0;
-                    let t2 = cpu_usage::get_cpu_totals().unwrap();
+                    let t2 = match cpu_usage::get_cpu_totals() {
+                        Ok(totals) => totals,
+                        Err(e) => {
+                            println!("Failed to get CPU totals: {}", e);
+                            continue;
+                        }
+                    };
                     let usage = 100.0 - (t2.1 - t1.1) / (t2.0 - t1.0) * 100.0;
                     t1 = t2;
                     speed = (200.0 / (usage / 5.0).clamp(1.0, 20.0)).round() as u64;

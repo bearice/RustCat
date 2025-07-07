@@ -10,9 +10,8 @@ pub fn get_cpu_totals() -> io::Result<(f64, f64)> {
     let mut kernel_time = empty();
     let mut user_time = empty();
     unsafe {
-        if GetSystemTimes(Some(&mut idle_time), Some(&mut kernel_time), Some(&mut user_time)).is_err() {
-            panic!("Error getting cpu usage");
-        }
+        GetSystemTimes(Some(&mut idle_time), Some(&mut kernel_time), Some(&mut user_time))
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to get system times: {}", e)))?;
     }
     let idle_time = filetime_to_u64(idle_time) as f64;
     let kernel_time = filetime_to_u64(kernel_time) as f64;
