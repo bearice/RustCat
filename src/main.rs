@@ -43,6 +43,52 @@ enum Events {
     ShowAboutDialog,
 }
 
+fn safe_message_box(message: &str, title: &str, flags: u32) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    unsafe {
+        let result = MessageBoxW(
+            HWND::default(),
+            &HSTRING::from(message),
+            &HSTRING::from(title),
+            windows::Win32::UI::WindowsAndMessaging::MESSAGEBOX_STYLE(flags),
+        );
+        if result.0 == 0 {
+            return Err("MessageBoxW failed".into());
+        }
+    }
+    Ok(())
+}
+
+fn safe_shell_execute(file: &str) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    unsafe {
+        let ret = ShellExecuteW(
+            HWND::default(),
+            None,
+            &HSTRING::from(file),
+            None,
+            None,
+            SW_SHOWNORMAL,
+        );
+        if ret.0 as usize <= 32 {
+            return Err(format!("ShellExecute failed with code: {}", ret.0 as usize).into());
+        }
+    }
+    Ok(())
+}
+
+fn safe_message_loop() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    unsafe {
+        let mut msg = std::mem::zeroed();
+        let bret = GetMessageA(&mut msg, None, 0, 0);
+        if bret.as_bool() {
+            let _ = TranslateMessage(&msg);
+            DispatchMessageA(&msg);
+            Ok(())
+        } else {
+            Err("GetMessageA returned 0 (WM_QUIT)".into())
+        }
+    }
+}
+
 
 fn main() {
     let (s, r) = std::sync::mpsc::channel::<Events>();
@@ -79,13 +125,8 @@ fn main() {
 
     std::panic::set_hook(Box::new(|e| {
         let msg = format!("Panic: {}", e);
-        unsafe {
-            let _ = MessageBoxW(
-                HWND::default(),
-                &HSTRING::from(&msg),
-                &HSTRING::from("RustCat Error"),
-                MB_OK,
-            );
+        if let Err(err) = safe_message_box(&msg, "RustCat Error", MB_OK.0) {
+            eprintln!("Failed to show panic dialog: {}", err);
         }
     }));
 
@@ -123,23 +164,11 @@ fn main() {
                         exit.store(true, Ordering::Relaxed);
                         break;
                     }
-                    Events::RunTaskmgr => unsafe {
-                        let ret = ShellExecuteW(
-                            HWND::default(),
-                            None,
-                            &HSTRING::from("taskmgr.exe"),
-                            None,
-                            None,
-                            SW_SHOWNORMAL,
-                        );
-                        if ret.0 as usize <= 32 {
-                            let msg = format!("ShellExecute failed: {}", ret.0 as usize);
-                            let _ = MessageBoxW(
-                                HWND::default(),
-                                &HSTRING::from(&msg),
-                                &HSTRING::from("RustCat Error"),
-                                MB_OK,
-                            );
+                    Events::RunTaskmgr => {
+                        if let Err(err) = safe_shell_execute("taskmgr.exe") {
+                            if let Err(msg_err) = safe_message_box(&err.to_string(), "RustCat Error", MB_OK.0) {
+                                eprintln!("Failed to show error dialog: {}", msg_err);
+                            }
                         }
                     },
                     Events::ThemeDark => update_icon(icon_id.load(Ordering::Relaxed) & 2),
@@ -156,7 +185,7 @@ fn main() {
                             .set_menu(&build_menu(icon_id.load(Ordering::Relaxed)))
                             .expect("set_menu for ToggleRunOnStart");
                     }
-                    Events::ShowAboutDialog => unsafe {
+                    Events::ShowAboutDialog => {
                         let version = env!("CARGO_PKG_VERSION");
                         let git_hash = option_env!("GIT_HASH").unwrap_or("N/A");
                         let project_page = "https://github.com/bearice/RustCat";
@@ -164,12 +193,9 @@ fn main() {
                             "RustCat version {} (Git: {})\nProject Page: {}",
                             version, git_hash, project_page
                         );
-                        let _ = MessageBoxW(
-                            HWND::default(),
-                            &HSTRING::from(&message),
-                            &HSTRING::from("About RustCat"),
-                            MB_OK | MB_ICONINFORMATION,
-                        );
+                        if let Err(err) = safe_message_box(&message, "About RustCat", (MB_OK | MB_ICONINFORMATION).0) {
+                            eprintln!("Failed to show about dialog: {}", err);
+                        }
                     },
                 }
             }
@@ -232,14 +258,15 @@ fn main() {
         });
     }
     while !exit.load(std::sync::atomic::Ordering::Relaxed) {
-        unsafe {
-            let mut msg = std::mem::zeroed();
-            let bret = GetMessageA(&mut msg, None, 0, 0);
-            if bret.as_bool() {
-                let _ = TranslateMessage(&msg);
-                DispatchMessageA(&msg);
-            } else {
-                break;
+        match safe_message_loop() {
+            Ok(()) => continue,
+            Err(err) => {
+                if err.to_string().contains("WM_QUIT") {
+                    break;
+                } else {
+                    eprintln!("Message loop error: {}", err);
+                    break;
+                }
             }
         }
     }
