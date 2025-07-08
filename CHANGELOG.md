@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-07-08
+
+### Added
+- Icon compression system using gzip for significantly reduced binary size
+- Aggressive compiler optimizations for release builds (size-focused)
+- Runtime icon decompression with efficient memory management
+- Updated application icon with improved design
+
+### Changed
+- Build system now compresses all icons into single chunk for maximum efficiency
+- Icon loading refactored to use compressed data with offset/size metadata
+- Release profile optimized for minimal binary size (opt-level="z", LTO, strip symbols)
+
+### Technical Improvements
+- Added flate2 dependency for compression support
+- Implemented single-chunk compression reduces icon storage overhead
+- Memory-efficient decompression keeps data alive for application lifetime
+- Build script generates optimized icon metadata at compile time
+
+### Performance
+- Significant binary size reduction through icon compression
+- Faster application startup through optimized release builds
+- Reduced memory fragmentation with single allocation for all icons
+
 ## [2.0.0] - 2025-07-08
 
 ### Added
