@@ -1,11 +1,14 @@
 use crate::platform::SystemIntegration;
 use std::process::Command;
-use windows::{core::*, Win32::Foundation::HWND, Win32::UI::WindowsAndMessaging::*};
+use windows::{core::HSTRING, Win32::{Foundation::HWND, UI::WindowsAndMessaging::{MessageBoxW, MB_OK, MESSAGEBOX_STYLE}}};
 
 pub struct WindowsSystemIntegration;
 
 impl SystemIntegration for WindowsSystemIntegration {
-    fn show_dialog(message: &str, title: &str) -> Result<(), Box<dyn std::error::Error>> {
+    fn show_dialog(
+        message: &str,
+        title: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         safe_message_box(message, title, MB_OK.0)?;
         Ok(())
     }
@@ -29,7 +32,7 @@ fn safe_message_box(
             MESSAGEBOX_STYLE(flags),
         );
         if result.0 == 0 {
-            return Err("MessageBoxW failed".into());
+            return Err("MessageBoxW failed".to_string().into());
         }
     }
     Ok(())

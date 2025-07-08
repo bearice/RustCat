@@ -1,6 +1,5 @@
 use crate::app::App;
 use crate::icon_manager::{IconManager, Theme};
-use crate::platform::{PlatformSettingsManager, SettingsManager};
 
 pub struct WindowsApp {
     app: App,
@@ -22,9 +21,5 @@ impl WindowsApp {
 
     pub fn run(self) {
         self.app.run();
-    }
-
-    pub fn shutdown(&self) {
-        self.app.shutdown();
     }
 }

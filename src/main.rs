@@ -7,9 +7,8 @@ mod platform;
 
 use crate::{
     icon_manager::IconManager,
-    platform::{SettingsManager, SystemIntegration, SettingsManagerImpl, SystemIntegrationImpl},
+    platform::{SettingsManager, SettingsManagerImpl, SystemIntegration, SystemIntegrationImpl},
 };
-
 
 #[cfg(target_os = "macos")]
 use crate::platform::macos::app::MacosApp;

@@ -71,7 +71,7 @@ impl CpuMonitor for MacosCpuMonitor {
         } else {
             0.0 // First call, return 0 usage
         };
-        
+
         *state = Some((total_ticks, idle_ticks));
         Ok(usage)
     }

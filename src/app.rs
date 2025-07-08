@@ -28,7 +28,7 @@ impl App {
         let icon_manager = Arc::new(icon_manager);
         let exit_flag = Arc::new(AtomicBool::new(false));
 
-        let theme = initial_theme.unwrap_or_else(|| SettingsManagerImpl::get_current_theme());
+        let theme = initial_theme.unwrap_or_else(SettingsManagerImpl::get_current_theme);
         let initial_icons = icon_manager
             .get_icon_set(initial_icon, Some(theme))
             .ok_or("Invalid initial icon name")?;

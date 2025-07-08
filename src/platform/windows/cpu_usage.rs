@@ -24,7 +24,7 @@ impl CpuMonitor for WindowsCpuMonitor {
         let kernel_time = filetime_to_u64(kernel_time) as f64;
         let user_time = filetime_to_u64(user_time) as f64;
         let total_time = kernel_time + user_time;
-        
+
         let mut state = CPU_STATE.lock().unwrap();
         let usage = if let Some((prev_total, prev_idle)) = *state {
             let total_diff = total_time - prev_total;
@@ -37,7 +37,7 @@ impl CpuMonitor for WindowsCpuMonitor {
         } else {
             0.0 // First call, return 0 usage
         };
-        
+
         *state = Some((total_time, idle_time));
         Ok(usage)
     }
