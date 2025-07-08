@@ -1,6 +1,6 @@
+use crate::icon_manager::{IconManager, Theme};
+use crate::platform::{SettingsManager, SettingsManagerImpl};
 use trayicon::MenuBuilder;
-use crate::settings::{is_run_on_start_enabled, get_current_icon, get_current_theme};
-use crate::icon_manager::{Theme, IconManager};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum Events {
@@ -14,12 +14,12 @@ pub enum Events {
 }
 
 pub fn build_menu(icon_manager: &IconManager) -> MenuBuilder<Events> {
-    let run_on_start_enabled = is_run_on_start_enabled();
-    let current_icon = get_current_icon();
-    let current_theme = get_current_theme();
-    
+    let run_on_start_enabled = SettingsManagerImpl::is_run_on_start_enabled();
+    let current_icon = SettingsManagerImpl::get_current_icon();
+    let current_theme = SettingsManagerImpl::get_current_theme();
+
     let mut menu = MenuBuilder::new();
-    
+
     // Build theme submenu - only show if current icon supports themes
     if icon_manager.supports_themes(&current_icon) {
         let available_themes = icon_manager.available_themes_for_icon(&current_icon);
@@ -27,16 +27,16 @@ pub fn build_menu(icon_manager: &IconManager) -> MenuBuilder<Events> {
             let mut theme_menu = MenuBuilder::new();
             for theme in available_themes {
                 let theme_name = match theme {
-                    Theme::Dark => "&Dark",
-                    Theme::Light => "&Light",
+                    Theme::Dark => "Dark",
+                    Theme::Light => "Light",
                 };
                 let is_current = current_theme == theme;
                 theme_menu = theme_menu.checkable(theme_name, is_current, Events::SetTheme(theme));
             }
-            menu = menu.submenu("&Theme", theme_menu);
+            menu = menu.submenu("Theme", theme_menu);
         }
     }
-    
+
     // Build icon submenu - dynamically from available icons
     let available_icons = icon_manager.available_icons();
     if available_icons.len() > 1 {
@@ -44,21 +44,27 @@ pub fn build_menu(icon_manager: &IconManager) -> MenuBuilder<Events> {
         for icon_name in available_icons {
             let is_current = current_icon == icon_name;
             // Capitalize first letter for display
-            let display_name = format!("&{}", icon_name.chars().next().unwrap().to_uppercase().collect::<String>() + &icon_name[1..]);
+            let display_name = icon_name
+                .chars()
+                .next()
+                .unwrap()
+                .to_uppercase()
+                .collect::<String>()
+                + &icon_name[1..];
             icon_menu = icon_menu.checkable(&display_name, is_current, Events::SetIcon(icon_name));
         }
-        menu = menu.submenu("&Icon", icon_menu);
+        menu = menu.submenu("Icon", icon_menu);
     }
-    
-    menu
-        .separator()
+
+    menu.separator()
         .checkable(
-            "&Run on Start",
+            "Run on Start",
             run_on_start_enabled,
             Events::ToggleRunOnStart,
         )
         .separator()
-        .item("&About", Events::ShowAboutDialog)
+        .item("System Monitor", Events::RunTaskmgr)
+        .item("About", Events::ShowAboutDialog)
         .separator()
-        .item("E&xit", Events::Exit)
+        .item("Exit", Events::Exit)
 }

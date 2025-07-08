@@ -11,8 +11,8 @@ on:
 
 jobs:
   #run build first to populate caches
-  build:
-    name: Build binary
+  build-windows:
+    name: Build Windows binary
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,50 +34,91 @@ jobs:
         with:
           command: build
           args: --workspace --all-targets --all-features --release
+
+
+
       - name: Check for release
         id: is-release
         shell: bash
         run: |
           unset IS_RELEASE ; if [[ $GITHUB_REF =~ ^refs/tags/v[0-9].* ]]; then IS_RELEASE='true' ; fi
           echo ::set-output name=IS_RELEASE::${IS_RELEASE}
-      - name: Artifact Hash
-        id: package
-        shell: bash
-        run: |
-          md5sum target/release/rust_cat.exe >> hashes.txt
-          sha256sum target/release/rust_cat.exe >> hashes.txt
-          cat hashes.txt
-      - name: Artifact upload
+
+      - name: Artifact upload (Windows)
         uses: actions/upload-artifact@master
         with:
           name: rust_cat.exe
           path: target/release/rust_cat.exe
-      - name: Hash upload
-        uses: actions/upload-artifact@master
-        with:
-          name: hashes.txt
-          path: hashes.txt
-      - name: Publish archives and packages
+
+
+
+      - name: Publish archives and packages (Windows)
         uses: softprops/action-gh-release@v1
         if: steps.is-release.outputs.IS_RELEASE
         with:
           files: |
             target/release/rust_cat.exe
-            hashes.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+  # Create universal macOS app bundle
+  build-macos:
+    name: Create universal macOS app bundle
+    runs-on: macos-latest
+    if: github.event_name != 'pull_request' || github.actor != 'dependabot[bot]'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Run macOS build script
+        run: ./build_macos.sh
+
+      - name: Check for release
+        id: is-release
+        shell: bash
+        run: |
+          unset IS_RELEASE ; if [[ $GITHUB_REF =~ ^refs/tags/v[0-9].* ]]; then IS_RELEASE='true' ; fi
+          echo ::set-output name=IS_RELEASE::${IS_RELEASE}
+
+      - name: Upload universal app bundle
+        uses: actions/upload-artifact@master
+        with:
+          name: RustCat-universal.app.zip
+          path: RustCat-universal.app.zip
+
+      - name: Upload universal DMG
+        uses: actions/upload-artifact@master
+        with:
+          name: RustCat-universal.dmg
+          path: RustCat-universal.dmg
+
+      - name: Publish universal macOS release
+        uses: softprops/action-gh-release@v1
+        if: steps.is-release.outputs.IS_RELEASE
+        with:
+          files: |
+            RustCat-universal.app.zip
+            RustCat-universal.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Auto-approve Dependabot PRs if build succeeds
   dependabot-auto-approve:
     runs-on: windows-latest
-    needs: build
+    needs: [build-windows, build-macos]
     if: github.actor == 'dependabot[bot]' && github.event_name == 'pull_request'
     steps:
       - name: Auto-approve PR
         uses: hmarr/auto-approve-action@v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Enable auto-merge
         run: |
           gh pr merge --auto --squash "${{ github.event.pull_request.number }}"

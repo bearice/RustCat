@@ -4,20 +4,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-RustCat is a Windows tray application that displays an animated cat or parrot icon whose animation speed reflects real-time CPU usage. It's a Rust port of RunCat_for_windows, removing the .NET runtime dependency.
+RustCat is a cross-platform tray application that displays an animated cat or parrot icon whose animation speed reflects real-time CPU usage. Originally a Windows-only Rust port of RunCat_for_windows, it now supports both Windows and macOS.
 
 ## Build and Development Commands
 
 ### Building
 ```bash
-# In WSL, use cargo.exe to build Windows binaries
+# Windows (In WSL, use cargo.exe to build Windows binaries)
 cargo.exe build --release
+
+# macOS
+cargo build --release
 ```
 
 ### Running (Development)
 ```bash
-# In WSL, use cargo.exe to run Windows binaries
+# Windows (In WSL, use cargo.exe to run Windows binaries)
 cargo.exe run
+
+# macOS
+cargo run
 ```
 
 ### Testing
@@ -69,11 +75,18 @@ Icons are organized in `assets/` directory:
 
 ### Platform Specifics
 
-- Windows-only application using Windows API extensively via windows-rs crate
+#### Windows
+- Uses Windows API extensively via windows-rs crate
 - Uses Windows subsystem (no console window in release builds)
 - Integrates with Windows registry for settings and startup behavior
-- Requires Windows for tray icon functionality and CPU monitoring
 - When developing in WSL, use `cargo.exe` instead of `cargo` to build Windows binaries
+
+#### macOS
+- Uses macOS NSApplication for proper integration
+- Uses macOS defaults command for settings persistence
+- Uses macOS LaunchAgents for startup behavior
+- Detects system dark/light theme automatically
+- Opens Activity Monitor instead of Task Manager
 
 ## Development Environment Notes
 
