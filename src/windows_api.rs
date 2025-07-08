@@ -8,7 +8,7 @@ use windows::{
 pub fn safe_message_box(message: &str, title: &str, flags: u32) -> std::result::Result<(), Box<dyn std::error::Error>> {
     unsafe {
         let result = MessageBoxW(
-            HWND::default(),
+            Some(HWND::default()),
             &HSTRING::from(message),
             &HSTRING::from(title),
             MESSAGEBOX_STYLE(flags),
@@ -23,7 +23,7 @@ pub fn safe_message_box(message: &str, title: &str, flags: u32) -> std::result::
 pub fn safe_shell_execute(file: &str) -> std::result::Result<(), Box<dyn std::error::Error>> {
     unsafe {
         let ret = ShellExecuteW(
-            HWND::default(),
+            Some(HWND::default()),
             None,
             &HSTRING::from(file),
             None,
