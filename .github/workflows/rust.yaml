@@ -13,7 +13,19 @@ jobs:
   #run build first to populate caches
   build:
     name: Build binary
-    runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: rust_cat.exe
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: rust_cat
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: rust_cat
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -30,40 +42,136 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+          target: ${{ matrix.target }}
+      - name: Install target
+        run: rustup target add ${{ matrix.target }}
       - uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --workspace --all-targets --all-features --release
+          args: --workspace --all-targets --all-features --release --target ${{ matrix.target }}
+
+
+
       - name: Check for release
         id: is-release
         shell: bash
         run: |
           unset IS_RELEASE ; if [[ $GITHUB_REF =~ ^refs/tags/v[0-9].* ]]; then IS_RELEASE='true' ; fi
           echo ::set-output name=IS_RELEASE::${IS_RELEASE}
-      - name: Artifact Hash
-        id: package
+
+      - name: Artifact upload (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@master
+        with:
+          name: rust_cat-${{ matrix.target }}.exe
+          path: target/${{ matrix.target }}/release/rust_cat.exe
+
+      - name: Artifact upload (macOS binary)
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@master
+        with:
+          name: rust_cat-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/rust_cat
+
+
+      - name: Publish archives and packages (Windows)
+        uses: softprops/action-gh-release@v1
+        if: steps.is-release.outputs.IS_RELEASE && matrix.os == 'windows-latest'
+        with:
+          files: |
+            target/${{ matrix.target }}/release/rust_cat.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish archives and packages (macOS)
+        uses: softprops/action-gh-release@v1
+        if: steps.is-release.outputs.IS_RELEASE && matrix.os == 'macos-latest'
+        with:
+          files: |
+            target/${{ matrix.target }}/release/rust_cat
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Create universal macOS app bundle
+  universal-macos:
+    name: Create universal macOS app bundle
+    runs-on: macos-latest
+    needs: build
+    if: github.event_name != 'pull_request' || github.actor != 'dependabot[bot]'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Intel binaries
+        uses: actions/download-artifact@v3
+        with:
+          name: rust_cat-x86_64-apple-darwin
+          path: ./x86_64/
+
+      - name: Download Apple Silicon binaries
+        uses: actions/download-artifact@v3
+        with:
+          name: rust_cat-aarch64-apple-darwin
+          path: ./aarch64/
+
+      - name: Create universal binary
+        run: |
+          # Create universal binary using lipo
+          lipo -create -output rust_cat_universal ./x86_64/rust_cat ./aarch64/rust_cat
+
+          # Verify the universal binary
+          lipo -info rust_cat_universal
+          file rust_cat_universal
+
+      - name: Create universal app bundle
+        run: |
+          # Create app icon
+          ./build_app_icon.sh || true
+
+          # Create universal app bundle
+          mkdir -p RustCat.app/Contents/MacOS
+          mkdir -p RustCat.app/Contents/Resources
+
+          # Copy universal binary
+          cp rust_cat_universal RustCat.app/Contents/MacOS/rust_cat
+          cp Info.plist RustCat.app/Contents/
+
+          # Copy app icon if it was created
+          if [ -f "RustCat.icns" ]; then
+            cp RustCat.icns RustCat.app/Contents/Resources/AppIcon.icns
+          fi
+
+          # Create zip archive
+          zip -r RustCat-universal.app.zip RustCat.app
+
+          # Create DMG
+          ./create_dmg.sh RustCat.app RustCat-universal.dmg
+
+      - name: Check for release
+        id: is-release
         shell: bash
         run: |
-          md5sum target/release/rust_cat.exe >> hashes.txt
-          sha256sum target/release/rust_cat.exe >> hashes.txt
-          cat hashes.txt
-      - name: Artifact upload
+          unset IS_RELEASE ; if [[ $GITHUB_REF =~ ^refs/tags/v[0-9].* ]]; then IS_RELEASE='true' ; fi
+          echo ::set-output name=IS_RELEASE::${IS_RELEASE}
+
+      - name: Upload universal app bundle
         uses: actions/upload-artifact@master
         with:
-          name: rust_cat.exe
-          path: target/release/rust_cat.exe
-      - name: Hash upload
+          name: RustCat-universal.app.zip
+          path: RustCat-universal.app.zip
+
+      - name: Upload universal DMG
         uses: actions/upload-artifact@master
         with:
-          name: hashes.txt
-          path: hashes.txt
-      - name: Publish archives and packages
+          name: RustCat-universal.dmg
+          path: RustCat-universal.dmg
+
+      - name: Publish universal macOS release
         uses: softprops/action-gh-release@v1
         if: steps.is-release.outputs.IS_RELEASE
         with:
           files: |
-            target/release/rust_cat.exe
-            hashes.txt
+            RustCat-universal.app.zip
+            RustCat-universal.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -77,7 +185,7 @@ jobs:
         uses: hmarr/auto-approve-action@v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Enable auto-merge
         run: |
           gh pr merge --auto --squash "${{ github.event.pull_request.number }}"
