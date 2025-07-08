@@ -14,7 +14,7 @@ use trayicon::*;
 pub struct App {
     tray_icon: Arc<Mutex<TrayIcon<Events>>>,
     icon_manager: Arc<IconManager>,
-    exit_flag: Arc<AtomicBool>,
+    pub(crate) exit_flag: Arc<AtomicBool>,
     event_receiver: Option<mpsc::Receiver<Events>>,
 }
 
