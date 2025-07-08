@@ -1,5 +1,17 @@
 use trayicon::Icon;
 use std::collections::HashMap;
+use flate2::read::GzDecoder;
+use std::io::Read;
+
+#[allow(dead_code)]
+mod icon_data {
+    pub struct IconGroupInfo {
+        pub offset: usize,
+        pub sizes: &'static [u32],
+    }
+    pub type IconData = HashMap<&'static str, HashMap<&'static str, IconGroupInfo>>;
+    include!(concat!(env!("OUT_DIR"), "/icon_data.rs"));
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Theme {
@@ -44,39 +56,53 @@ impl IconManager {
     pub fn load_icons() -> Result<Self, Box<dyn std::error::Error>> {
         let mut manager = Self::new();
         
-        // Define icon configurations: (base_name, supports_themes, [(theme, icon_data)])
-        // Adding new icons is as simple as adding a new entry here!
-        let icon_configs = [
-            ("cat", true, vec![
-                (Theme::Dark, crate::icon_data::DARK_CAT),
-                (Theme::Light, crate::icon_data::LIGHT_CAT),
-            ]),
-            ("parrot", true, vec![
-                (Theme::Dark, crate::icon_data::DARK_PARROT),
-                (Theme::Light, crate::icon_data::LIGHT_PARROT),
-            ]),
-            // Example: to add a new "dog" icon, just add:
-            // ("dog", true, vec![
-            //     (Theme::Dark, crate::icon_data::DARK_DOG),
-            //     (Theme::Light, crate::icon_data::LIGHT_DOG),
-            // ]),
-            // The menu system will automatically detect it and add it to the menu!
-        ];
+        // Decompress the single big chunk containing all icons
+        let mut decoder = GzDecoder::new(icon_data::ALL_ICONS_COMPRESSED);
+        let mut all_decompressed = Vec::new();
+        decoder.read_to_end(&mut all_decompressed)
+            .map_err(|e| format!("Failed to decompress all icons: {}", e))?;
         
-        for (base_name, supports_themes, theme_data) in icon_configs.iter() {
-            manager.theme_support.insert(base_name.to_string(), *supports_themes);
+        // Leak the decompressed data to keep it alive for the lifetime of the program
+        let all_decompressed = Box::leak(all_decompressed.into_boxed_slice());
+        
+        // Get icon metadata from build script generated module
+        let icon_metadata_map = icon_data::get_icon_metadata();
+        
+        for (icon_name, theme_data) in icon_metadata_map {
+            // All current icons support themes
+            manager.theme_support.insert(icon_name.to_string(), true);
             let mut themes_map = HashMap::new();
             
-            for (theme, data) in theme_data.iter() {
-                let icons: Result<Vec<Icon>, _> = data
-                    .iter()
-                    .map(|icon_bytes| Icon::from_buffer(icon_bytes, None, None))
-                    .collect();
+            for (theme_str, group_info) in theme_data {
+                let theme = match theme_str {
+                    "dark" => Theme::Dark,
+                    "light" => Theme::Light,
+                    _ => continue, // Skip unknown themes
+                };
                 
-                themes_map.insert(*theme, icons?);
+                // Extract this group's data from the big decompressed chunk
+                let mut icons = Vec::new();
+                let mut current_offset = group_info.offset;
+                
+                for &size in group_info.sizes {
+                    let size = size as usize;
+                    if current_offset + size > all_decompressed.len() {
+                        return Err(format!("Invalid icon offset/size data for {} {}", icon_name, theme_str).into());
+                    }
+                    
+                    let icon_data = &all_decompressed[current_offset..current_offset + size];
+                    
+                    let icon = Icon::from_buffer(icon_data, None, None)
+                        .map_err(|e| format!("Failed to create icon from buffer for {} {}: {}", icon_name, theme_str, e))?;
+                    
+                    icons.push(icon);
+                    current_offset += size;
+                }
+                
+                themes_map.insert(theme, icons);
             }
             
-            manager.icon_sets.insert(base_name.to_string(), themes_map);
+            manager.icon_sets.insert(icon_name.to_string(), themes_map);
         }
         
         Ok(manager)

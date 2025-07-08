@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 trayicon = "0.2.0"
 winreg = "0.55.0"
+flate2 = "1.0"
 
 [dependencies.windows]
 version = "0.61"
@@ -19,8 +20,16 @@ features = [
     "Win32_System_SystemInformation"
 ]
 
+[profile.release]
+opt-level = "z"        # Optimize for size
+strip = true           # Strip debug symbols
+lto = true             # Enable Link Time Optimization
+codegen-units = 1      # Reduce code generation units
+panic = "abort"        # Reduce panic code size
+
 [build-dependencies]
 winres = "0.1"
+flate2 = "1.0"
 
 [package.metadata.winres]
 OriginalFilename = "rust_cat.exe"
