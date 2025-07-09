@@ -241,7 +241,7 @@ dependencies = [
 
 [[package]]
 name = "rust_cat"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "dirs",
  "flate2",
