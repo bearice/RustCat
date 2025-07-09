@@ -54,7 +54,7 @@ This project does not have automated tests. Testing is done manually by running 
 - **Animated Icons**: Cat and parrot themes with light/dark variants
 - **CPU Monitoring**: Animation speed correlates with CPU usage (higher usage = faster animation)
 - **Theme Support**: Automatically detects Windows dark/light theme
-- **Registry Integration**: 
+- **Registry Integration**:
   - Stores user preferences in `HKEY_CURRENT_USER\Software\RustCat`
   - Supports "Run on Start" functionality via Windows Run registry key
 - **Tray Menu**: Right-click menu for theme selection, icon selection, and settings
@@ -91,3 +91,29 @@ Icons are organized in `assets/` directory:
 ## Development Environment Notes
 
 - When running in WSL, use `cargo.exe` to build
+
+## Release Workflow
+
+When bumping versions and creating releases:
+
+1. **Update version in Cargo.toml**
+2. **Update CHANGELOG.md** with detailed release notes including:
+   - Added features
+   - Changed functionality
+   - Fixed bugs
+   - Technical improvements
+   - Performance enhancements
+3. **Commit and tag**:
+   ```bash
+   git add -A
+   git commit -m "Bump version X.Y.Z with [description]"
+   git tag -f vX.Y.Z
+   git push origin master
+   git push origin vX.Y.Z --force
+   ```
+4. **Create GitHub release**:
+   ```bash
+   gh release create vX.Y.Z --title "RustCat vX.Y.Z" --notes "[changelog content]"
+   ```
+
+This workflow ensures consistent versioning, comprehensive documentation, and proper release management.
