@@ -39,8 +39,6 @@ impl MacosApp {
         });
 
         // Run the macOS application main loop
-        unsafe {
-            self.ns_app.run();
-        }
+        self.ns_app.run();
     }
 }
