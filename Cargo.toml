@@ -9,6 +9,7 @@ edition = "2021"
 trayicon = { git = "https://github.com/bearice/trayicon-rs.git" }
 flate2 = "1.0"
 dirs = "5.0"
+dispatch = "0.2.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55.0"

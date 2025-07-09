@@ -11,6 +11,19 @@ use crate::platform::{CpuMonitorImpl, SettingsManagerImpl, SystemIntegrationImpl
 
 use trayicon::*;
 
+// On macos, ui updates must be done on the main thread.
+// This is a workaround to ensure that UI updates are dispatched correctly.
+#[cfg(target_os = "macos")]
+use dispatch;
+#[cfg(target_os = "macos")]
+fn ui_update<F: FnOnce() + Send + 'static>(f: F) {
+    dispatch::Queue::main().exec_async(f);
+}
+#[cfg(windows)]
+fn ui_update<F: FnOnce() + Send + 'static>(f: F) {
+    // Windows does not require special handling for UI updates
+    f();
+}
 pub struct App {
     tray_icon: Arc<Mutex<TrayIcon<Events>>>,
     icon_manager: Arc<IconManager>,
@@ -88,10 +101,16 @@ impl App {
                     animate_counter = 0;
                     icon_index += 1;
                     icon_index %= icons.len();
-                    if let Ok(mut tray) = tray_icon.lock() {
-                        if let Err(e) = tray.set_icon(&icons[icon_index]) {
-                            eprintln!("set_icon error: {:?}", e);
-                        }
+                    {
+                        let tray_icon_clone = tray_icon.clone();
+                        let icon_data = icons[icon_index].clone();
+                        ui_update(move || {
+                            if let Ok(mut tray) = tray_icon_clone.lock() {
+                                if let Err(e) = tray.set_icon(&icon_data) {
+                                    eprintln!("set_icon error: {:?}", e);
+                                }
+                            }
+                        });
                     }
                 }
                 animate_counter += sleep_interval;
@@ -108,10 +127,17 @@ impl App {
                     speed = (200.0 / (usage / 5.0).clamp(1.0_f64, 20.0_f64)).round() as u64;
                     println!("CPU Usage: {:.2}% speed: {}", usage, speed);
 
-                    if let Ok(mut tray) = tray_icon.lock() {
-                        if let Err(e) = tray.set_tooltip(&format!("CPU Usage: {:.2}%", usage)) {
-                            eprintln!("set_tooltip error: {:?}", e);
-                        }
+                    {
+                        let tray_icon_clone = tray_icon.clone();
+                        ui_update(move || {
+                            if let Ok(mut tray) = tray_icon_clone.lock() {
+                                if let Err(e) =
+                                    tray.set_tooltip(&format!("CPU Usage: {:.2}%", usage))
+                                {
+                                    eprintln!("set_tooltip error: {:?}", e);
+                                }
+                            }
+                        });
                     }
                 }
                 update_counter += sleep_interval;
@@ -186,11 +212,15 @@ impl App {
     }
 
     fn update_menu(&self) {
-        if let Ok(mut tray) = self.tray_icon.lock() {
-            if let Err(e) = tray.set_menu(&build_menu(&self.icon_manager)) {
-                eprintln!("Failed to update menu: {}", e);
+        let tray_icon = self.tray_icon.clone();
+        let icon_manager = self.icon_manager.clone();
+        ui_update(move || {
+            if let Ok(mut tray) = tray_icon.lock() {
+                if let Err(e) = tray.set_menu(&build_menu(&icon_manager)) {
+                    eprintln!("Failed to update menu: {}", e);
+                }
             }
-        }
+        });
     }
 
     pub fn shutdown(&self) {
