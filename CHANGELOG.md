@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2025-07-09
+
+### Changed
+
+- Upgraded objc2 dependencies to 0.6.x for improved macOS compatibility
+- Removed unsafe block from macOS implementation
+
+### Performance
+
+- Optimized icon and theme settings caching to reduce system calls
+- Improved overall application responsiveness through reduced OS interactions
+
 ## [2.2.0] - 2025-07-09
 
 ### Added
