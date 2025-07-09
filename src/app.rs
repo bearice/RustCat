@@ -16,6 +16,8 @@ pub struct App {
     icon_manager: Arc<IconManager>,
     pub(crate) exit_flag: Arc<AtomicBool>,
     event_receiver: Option<mpsc::Receiver<Events>>,
+    icon_name: Arc<Mutex<String>>,
+    theme: Arc<Mutex<Theme>>,
 }
 
 impl App {
@@ -49,6 +51,8 @@ impl App {
             icon_manager,
             exit_flag,
             event_receiver: Some(receiver),
+            icon_name: Arc::new(Mutex::new(initial_icon.to_string())),
+            theme: Arc::new(Mutex::new(theme)),
         })
     }
 
@@ -56,6 +60,8 @@ impl App {
         let exit_flag = self.exit_flag.clone();
         let tray_icon = self.tray_icon.clone();
         let icon_manager = self.icon_manager.clone();
+        let icon_name = self.icon_name.clone();
+        let theme = self.theme.clone();
 
         thread::spawn(move || {
             let sleep_interval = 10;
@@ -67,8 +73,8 @@ impl App {
             while !exit_flag.load(Ordering::Relaxed) {
                 thread::sleep(Duration::from_millis(sleep_interval));
 
-                let current_icon_name = SettingsManagerImpl::get_current_icon();
-                let current_theme = SettingsManagerImpl::get_current_theme();
+                let current_icon_name = icon_name.lock().unwrap().clone();
+                let current_theme = *theme.lock().unwrap();
                 let icons = match icon_manager.get_icon_set(&current_icon_name, Some(current_theme))
                 {
                     Some(icons) => icons,
@@ -139,10 +145,12 @@ impl App {
                     }
                     Events::SetTheme(theme) => {
                         SettingsManagerImpl::set_current_theme(Some(theme));
+                        *self.theme.lock().unwrap() = theme;
                         self.update_menu();
                     }
                     Events::SetIcon(icon_name) => {
                         SettingsManagerImpl::set_current_icon(&icon_name);
+                        *self.icon_name.lock().unwrap() = icon_name;
                         self.update_menu();
                     }
                     Events::ToggleRunOnStart => {
