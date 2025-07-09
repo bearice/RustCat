@@ -17,9 +17,16 @@ mod icon_data {
 pub enum Theme {
     Dark,
     Light,
+    #[cfg(target_os = "macos")]
+    Auto,
 }
 
 impl Theme {
+    #[cfg(target_os = "macos")]
+    pub fn from_system() -> Self {
+        Theme::Auto
+    }
+    #[cfg(not(target_os = "macos"))]
     pub fn from_system() -> Self {
         use crate::platform::{SettingsManager, SettingsManagerImpl};
         if SettingsManagerImpl::is_dark_mode_enabled() {
@@ -35,6 +42,8 @@ impl std::fmt::Display for Theme {
         match self {
             Theme::Dark => write!(f, "dark"),
             Theme::Light => write!(f, "light"),
+            #[cfg(target_os = "macos")]
+            Theme::Auto => write!(f, "auto"),
         }
     }
 }
@@ -70,63 +79,97 @@ impl IconManager {
         // Get icon metadata from build script generated module
         let icon_metadata_map = icon_data::get_icon_metadata();
 
+        fn load_icons(
+            icon_name: &str,
+            theme_str: &str,
+            data: &'static [u8],
+            offset: usize,
+            sizes: &[u32],
+        ) -> Result<Vec<Icon>, String> {
+            let mut icons = Vec::new();
+            let mut current_offset = offset as usize;
+
+            for &size in sizes {
+                let size = size as usize;
+                if current_offset + size > data.len() {
+                    return Err(format!(
+                        "Invalid icon offset/size data: {} + {} exceeds data length",
+                        current_offset, size
+                    ));
+                }
+
+                let icon_data = &data[current_offset..current_offset + size];
+                let icon = {
+                    #[cfg(windows)]
+                    {
+                        Icon::from_buffer(icon_data, None, None).map_err(|e| {
+                            format!(
+                                "Failed to create icon from buffer for {} {}: {}",
+                                icon_name, theme_str, e
+                            )
+                        })
+                    }
+                    #[cfg(target_os = "macos")]
+                    {
+                        // macOS tray icons should be smaller (16x16 is the standard size)
+                        Icon::from_buffer(icon_data, Some(16), Some(16)).map_err(|e| {
+                            format!(
+                                "Failed to create icon from buffer for {} {}: {}",
+                                icon_name, theme_str, e
+                            )
+                        })
+                    }
+                }?;
+
+                icons.push(icon);
+                current_offset += size;
+            }
+
+            Ok(icons)
+        }
+
         for (icon_name, theme_data) in icon_metadata_map {
             // All current icons support themes
             manager.theme_support.insert(icon_name.to_string(), true);
             let mut themes_map = HashMap::new();
 
-            for (theme_str, group_info) in theme_data {
+            for (&theme_str, group_info) in &theme_data {
                 let theme = match theme_str {
                     "dark" => Theme::Dark,
                     "light" => Theme::Light,
                     _ => continue, // Skip unknown themes
                 };
-
-                // Extract this group's data from the big decompressed chunk
-                let mut icons = Vec::new();
-                let mut current_offset = group_info.offset;
-
-                for &size in group_info.sizes {
-                    let size = size as usize;
-                    if current_offset + size > all_decompressed.len() {
-                        return Err(format!(
-                            "Invalid icon offset/size data for {} {}",
-                            icon_name, theme_str
-                        )
-                        .into());
-                    }
-
-                    let icon_data = &all_decompressed[current_offset..current_offset + size];
-
-                    let icon = {
-                        #[cfg(windows)]
-                        {
-                            Icon::from_buffer(icon_data, None, None).map_err(|e| {
-                                format!(
-                                    "Failed to create icon from buffer for {} {}: {}",
-                                    icon_name, theme_str, e
-                                )
-                            })?
-                        }
-                        #[cfg(target_os = "macos")]
-                        {
-                            // macOS tray icons should be smaller (16x16 is the standard size)
-                            Icon::from_buffer(icon_data, Some(16), Some(16)).map_err(|e| {
-                                format!(
-                                    "Failed to create icon from buffer for {} {}: {}",
-                                    icon_name, theme_str, e
-                                )
-                            })?
-                        }
-                    };
-
-                    icons.push(icon);
-                    current_offset += size;
-                }
+                let icons = load_icons(
+                    icon_name,
+                    theme_str,
+                    all_decompressed,
+                    group_info.offset,
+                    group_info.sizes,
+                )?;
 
                 themes_map.insert(theme, icons);
             }
 
+            #[cfg(target_os = "macos")]
+            {
+                // macOS icons are always themed because Auto are generated from first theme
+                let group_info = theme_data
+                    .get("light")
+                    .or_else(|| theme_data.get("dark"))
+                    .unwrap();
+                let mut icons = load_icons(
+                    icon_name,
+                    "auto",
+                    all_decompressed,
+                    group_info.offset,
+                    group_info.sizes,
+                )?;
+                for icon in &mut icons {
+                    icon.set_template(true);
+                }
+                manager.theme_support.insert(icon_name.to_string(), true);
+                themes_map.insert(Theme::Auto, icons);
+            }
             manager.icon_sets.insert(icon_name.to_string(), themes_map);
         }
 
@@ -168,6 +211,8 @@ impl IconManager {
             themes.sort_by_key(|t| match t {
                 Theme::Dark => 0,
                 Theme::Light => 1,
+                #[cfg(target_os = "macos")]
+                Theme::Auto => 2,
             });
             themes
         } else {

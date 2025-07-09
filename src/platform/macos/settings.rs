@@ -20,6 +20,8 @@ impl SettingsManager for MacosSettingsManager {
             match theme_str.as_str() {
                 "dark" => Theme::Dark,
                 "light" => Theme::Light,
+                #[cfg(target_os = "macos")]
+                "auto" => Theme::Auto,
                 _ => Theme::from_system(),
             }
         } else {

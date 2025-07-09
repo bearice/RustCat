@@ -29,8 +29,11 @@ pub fn build_menu(icon_manager: &IconManager) -> MenuBuilder<Events> {
                 let theme_name = match theme {
                     Theme::Dark => "Dark",
                     Theme::Light => "Light",
+                    #[cfg(target_os = "macos")]
+                    Theme::Auto => "Auto",
                 };
                 let is_current = current_theme == theme;
+                println!("current_theme: {:?}, new_theme: {:?}", current_theme, theme);
                 theme_menu = theme_menu.checkable(theme_name, is_current, Events::SetTheme(theme));
             }
             menu = menu.submenu("Theme", theme_menu);
