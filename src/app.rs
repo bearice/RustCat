@@ -97,14 +97,14 @@ impl App {
 
                 let current_icon_name = icon_name.lock().unwrap().clone();
                 let current_theme = *theme.lock().unwrap();
-                
+
                 // Determine which icon set to use based on idle state
                 let icon_set_name = if is_sleeping && current_icon_name == "cat" {
                     "sleep"
                 } else {
                     &current_icon_name
                 };
-                
+
                 let icons = match icon_manager.get_icon_set(icon_set_name, Some(current_theme))
                 {
                     Some(icons) => icons,
@@ -230,7 +230,7 @@ impl App {
                         let git_hash = option_env!("GIT_HASH").unwrap_or("N/A");
                         let project_page = "https://github.com/bearice/RustCat";
                         let message = format!(
-                            "RustCat version {} (Git: {})\\nProject Page: {}",
+                            "RustCat version {} (Git: {})\nProject Page: {}",
                             version, git_hash, project_page
                         );
 

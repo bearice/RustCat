@@ -1,4 +1,5 @@
 use crate::platform::SystemIntegration;
+use objc2_foundation::{NSCalendar, NSCalendarUnit, NSDate};
 use std::process::Command;
 
 pub struct MacosSystemIntegration;
@@ -9,7 +10,7 @@ impl SystemIntegration for MacosSystemIntegration {
             .arg("-e")
             .arg(&format!(
                 r#"display dialog "{}" with title "{}" buttons {{"OK"}} default button "OK""#,
-                message.replace("\"", "\\\""),
+                message.replace("\"", "\\\"").replace("\n", "\\n"),
                 title.replace("\"", "\\\"")
             ))
             .spawn()?;
@@ -25,18 +26,11 @@ impl SystemIntegration for MacosSystemIntegration {
     }
 
     fn get_local_hour() -> u32 {
-        let output = Command::new("date")
-            .arg("+%H")
-            .output()
-            .unwrap_or_else(|_| std::process::Output {
-                status: std::process::ExitStatus::default(),
-                stdout: b"0".to_vec(),
-                stderr: Vec::new(),
-            });
-        
-        String::from_utf8_lossy(&output.stdout)
-            .trim()
-            .parse()
-            .unwrap_or(0)
+        unsafe {
+            let calendar = NSCalendar::currentCalendar();
+            let now = NSDate::now();
+            let components = calendar.components_fromDate(NSCalendarUnit::Hour, &now);
+            components.hour() as u32
+        }
     }
 }

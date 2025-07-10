@@ -2,7 +2,7 @@ use crate::icon_manager::Theme;
 use crate::platform::SettingsManager;
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
+use objc2_foundation::{NSString, NSUserDefaults};
 
 pub struct MacosSettingsManager;
 
@@ -20,7 +20,6 @@ impl SettingsManager for MacosSettingsManager {
             match theme_str.as_str() {
                 "dark" => Theme::Dark,
                 "light" => Theme::Light,
-                #[cfg(target_os = "macos")]
                 "auto" => Theme::Auto,
                 _ => Theme::from_system(),
             }
@@ -95,14 +94,15 @@ impl SettingsManager for MacosSettingsManager {
     }
 
     fn is_dark_mode_enabled() -> bool {
-        let output = Command::new("defaults")
-            .args(&["read", "-g", "AppleInterfaceStyle"])
-            .output();
+        unsafe {
+            let defaults = NSUserDefaults::standardUserDefaults();
+            let key = NSString::from_str("AppleInterfaceStyle");
 
-        if let Ok(output) = output {
-            let result = String::from_utf8_lossy(&output.stdout);
-            result.trim() == "Dark"
-        } else {
+            if let Some(value) = defaults.objectForKey(&key) {
+                if let Some(ns_string) = value.downcast_ref::<NSString>() {
+                    return ns_string.to_string() == "Dark";
+                }
+            }
             false
         }
     }
@@ -113,30 +113,33 @@ impl SettingsManager for MacosSettingsManager {
 }
 
 fn get_preference(key: &str) -> Option<String> {
-    let output = Command::new("defaults")
-        .args(&["read", "com.bearice.rustcat", key])
-        .output();
+    unsafe {
+        let defaults = NSUserDefaults::standardUserDefaults();
+        let key_string = NSString::from_str(key);
 
-    if let Ok(output) = output {
-        if output.status.success() {
-            let result = String::from_utf8_lossy(&output.stdout);
-            Some(result.trim().to_string())
-        } else {
-            None
-        }
-    } else {
-        None
+        let value = defaults.objectForKey(&key_string)?;
+        let ns_string = value.downcast_ref::<NSString>()?;
+        Some(ns_string.to_string())
     }
 }
 
 fn set_preference(key: &str, value: &str) {
-    let _ = Command::new("defaults")
-        .args(&["write", "com.bearice.rustcat", key, value])
-        .status();
+    unsafe {
+        let defaults = NSUserDefaults::standardUserDefaults();
+        let key_string = NSString::from_str(key);
+        let value_string = NSString::from_str(value);
+
+        defaults.setObject_forKey(Some(&value_string), &key_string);
+        defaults.synchronize();
+    }
 }
 
 fn remove_preference(key: &str) {
-    let _ = Command::new("defaults")
-        .args(&["delete", "com.bearice.rustcat", key])
-        .status();
+    unsafe {
+        let defaults = NSUserDefaults::standardUserDefaults();
+        let key_string = NSString::from_str(key);
+
+        defaults.removeObjectForKey(&key_string);
+        defaults.synchronize();
+    }
 }
