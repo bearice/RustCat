@@ -14,14 +14,14 @@ Inspired by [Kyome22/RunCat_for_windows](https://github.com/Kyome22/RunCat_for_w
 ## 🪶 Features
 Speedy Cat Visuals: Watch your system load as a tiny cat dashes across your taskbar.
 
-No Runtime Baggage: Written in Rust, so it’s leaner than a whisker.
+No Runtime Baggage: Written in Rust, so it’s leaner than a whisker. (In human language: It's small and uses less memory.)
 
 Platform Flair: Supports Windows and macOS with native theme detection.
 
 Auto Theme Matching: Your cat’s colors shift with your system's light/dark mode — drama-free style.
 
 ## 🧩 Installation
-Visit the [Releases page](/release) and grab the file. Double-click, and let the cat out.
+Visit the [Releases page](https://github.com/bearice/RustCat/releases) and grab the file. Double-click, and let the cat out.
 
 ## 💬 Quote from the Dev
 “RustCat doesn’t monitor your CPU. It vibes with it.” — Bearice
