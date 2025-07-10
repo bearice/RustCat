@@ -23,4 +23,20 @@ impl SystemIntegration for MacosSystemIntegration {
             .spawn()?;
         Ok(())
     }
+
+    fn get_local_hour() -> u32 {
+        let output = Command::new("date")
+            .arg("+%H")
+            .output()
+            .unwrap_or_else(|_| std::process::Output {
+                status: std::process::ExitStatus::default(),
+                stdout: b"0".to_vec(),
+                stderr: Vec::new(),
+            });
+        
+        String::from_utf8_lossy(&output.stdout)
+            .trim()
+            .parse()
+            .unwrap_or(0)
+    }
 }

@@ -11,6 +11,12 @@ use crate::platform::{CpuMonitorImpl, SettingsManagerImpl, SystemIntegrationImpl
 
 use trayicon::*;
 
+fn is_sleep_time() -> bool {
+    let hour = SystemIntegrationImpl::get_local_hour();
+    // Check if current hour is between 22:00 and 6:00
+    !(6..22).contains(&hour)
+}
+
 // On macos, ui updates must be done on the main thread.
 // This is a workaround to ensure that UI updates are dispatched correctly.
 #[cfg(target_os = "macos")]
@@ -82,17 +88,28 @@ impl App {
             let mut animate_counter = 0;
             let mut icon_index = 0;
             let mut speed = 200;
+            let mut idle_counter = 0;
+            let idle_threshold = 60 * 1000; // 1 minute in milliseconds
+            let mut is_sleeping = false;
 
             while !exit_flag.load(Ordering::Relaxed) {
                 thread::sleep(Duration::from_millis(sleep_interval));
 
                 let current_icon_name = icon_name.lock().unwrap().clone();
                 let current_theme = *theme.lock().unwrap();
-                let icons = match icon_manager.get_icon_set(&current_icon_name, Some(current_theme))
+                
+                // Determine which icon set to use based on idle state
+                let icon_set_name = if is_sleeping && current_icon_name == "cat" {
+                    "sleep"
+                } else {
+                    &current_icon_name
+                };
+                
+                let icons = match icon_manager.get_icon_set(icon_set_name, Some(current_theme))
                 {
                     Some(icons) => icons,
                     None => {
-                        eprintln!("Invalid icon name: {}", current_icon_name);
+                        eprintln!("Invalid icon name: {}", icon_set_name);
                         continue;
                     }
                 };
@@ -127,13 +144,37 @@ impl App {
                     speed = (200.0 / (usage / 5.0).clamp(1.0_f64, 20.0_f64)).round() as u64;
                     println!("CPU Usage: {:.2}% speed: {}", usage, speed);
 
+                    // Check if CPU is idle (less than 5% usage) and it's sleep time (22:00-6:00)
+                    if usage < 5.0 && is_sleep_time() {
+                        idle_counter += 1000; // Add the update interval
+                        if idle_counter >= idle_threshold && !is_sleeping {
+                            is_sleeping = true;
+                            icon_index = 0; // Reset animation to start from first sleeping frame
+                            println!("CPU has been idle for 1 minutes during sleep hours, switching to sleeping cat");
+                        }
+                    } else {
+                        idle_counter = 0;
+                        if is_sleeping {
+                            is_sleeping = false;
+                            icon_index = 0; // Reset animation
+                            if usage >= 5.0 {
+                                println!("CPU activity detected, switching back to normal cat");
+                            } else {
+                                println!("Outside sleep hours, switching back to normal cat");
+                            }
+                        }
+                    }
+
                     {
                         let tray_icon_clone = tray_icon.clone();
+                        let tooltip = if is_sleeping && current_icon_name == "cat" {
+                            "Shhhh, Your CPU is sleeping...💤".to_string()
+                        } else {
+                            format!("CPU Usage: {:.2}%", usage)
+                        };
                         ui_update(move || {
                             if let Ok(mut tray) = tray_icon_clone.lock() {
-                                if let Err(e) =
-                                    tray.set_tooltip(&format!("CPU Usage: {:.2}%", usage))
-                                {
+                                if let Err(e) = tray.set_tooltip(&tooltip) {
                                     eprintln!("set_tooltip error: {:?}", e);
                                 }
                             }

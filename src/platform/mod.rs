@@ -27,6 +27,7 @@ pub trait SettingsManager {
 pub trait SystemIntegration {
     fn show_dialog(message: &str, title: &str) -> Result<(), Box<dyn std::error::Error>>;
     fn open_system_monitor() -> Result<(), Box<dyn std::error::Error>>;
+    fn get_local_hour() -> u32;
 }
 
 /// Platform-specific implementation type aliases

@@ -1,6 +1,6 @@
 use crate::platform::SystemIntegration;
 use std::process::Command;
-use windows::{core::HSTRING, Win32::{Foundation::HWND, UI::WindowsAndMessaging::{MessageBoxW, MB_OK, MESSAGEBOX_STYLE}}};
+use windows::{core::HSTRING, Win32::{Foundation::HWND, UI::WindowsAndMessaging::{MessageBoxW, MB_OK, MESSAGEBOX_STYLE}, System::SystemInformation::GetLocalTime}};
 
 pub struct WindowsSystemIntegration;
 
@@ -16,6 +16,13 @@ impl SystemIntegration for WindowsSystemIntegration {
     fn open_system_monitor() -> Result<(), Box<dyn std::error::Error>> {
         Command::new("taskmgr").spawn()?;
         Ok(())
+    }
+
+    fn get_local_hour() -> u32 {
+        unsafe {
+            let st = GetLocalTime();
+            st.wHour as u32
+        }
     }
 }
 

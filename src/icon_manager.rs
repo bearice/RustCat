@@ -200,7 +200,10 @@ impl IconManager {
     }
 
     pub fn available_icons(&self) -> Vec<String> {
-        let mut icons: Vec<String> = self.icon_sets.keys().cloned().collect();
+        let mut icons: Vec<String> = self.icon_sets.keys()
+            .filter(|&name| name != "sleep") // Hide sleep icons from menu
+            .cloned()
+            .collect();
         icons.sort();
         icons
     }

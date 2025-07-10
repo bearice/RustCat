@@ -50,6 +50,7 @@ fn generate_icon_resources() -> io::Result<()> {
     let icon_configs = [
         ("cat", [("light", 5), ("dark", 5)]),
         ("parrot", [("light", 10), ("dark", 10)]),
+        ("sleep", [("light", 3), ("dark", 3)]),
     ];
 
     // Concatenate ALL icons into one big chunk for maximum compression
