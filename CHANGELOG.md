@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2025-07-10
+
+### Added
+
+- Auto theme support for macOS that follows system wallpaper color
+- Template icon support for macOS allowing icons to adapt to system theme
+  automatically
+- I put an easter egg there, can you find it? 😉
+
+### Fixed
+
+- Fixed version extraction in macOS build script causing sed command failures
+- Improved version parsing to handle multiple version entries in Cargo.toml
+
+### Technical Improvements
+
+- Consolidated macOS build scripts into single comprehensive build_macos.sh
+  script
+- Enhanced macOS build process reliability and error handling
+- Removed separate build_app_icon.sh and create_dmg.sh scripts in favor of
+  unified approach
+- Added Auto theme option to macOS theme menu
+
 ## [2.2.2] - 2025-07-09
 
 ### Fixed
@@ -38,7 +61,8 @@ and this project adheres to
 - Cross-platform architecture with Windows/macOS abstraction
 - Platform-specific settings storage (Windows Registry vs macOS defaults)
 - Platform-specific startup behavior (Windows Run key vs macOS LaunchAgents)
-- Platform-specific system monitor integration (Task Manager vs Activity Monitor)
+- Platform-specific system monitor integration (Task Manager vs Activity
+  Monitor)
 
 ### Fixed
 
