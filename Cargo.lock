@@ -360,7 +360,7 @@ dependencies = [
 [[package]]
 name = "trayicon"
 version = "0.2.0"
-source = "git+https://github.com/bearice/trayicon-rs.git#18fbff21701485084b1238d39036bf88afc982ba"
+source = "git+https://github.com/bearice/trayicon-rs.git#67d32cd7e9933bd26853480db02c112427cec066"
 dependencies = [
  "objc2",
  "objc2-app-kit",
