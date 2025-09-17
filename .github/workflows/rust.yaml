@@ -117,10 +117,11 @@ jobs:
   dependabot-auto-approve:
     runs-on: ubuntu-latest
     needs: [build-windows, build-macos]
-    if: github.actor == 'dependabot[bot]' && github.event_name == 'pull_request'
+    if: github.actor == 'dependabot[bot]' && github.event_name == 'pull_request_target'
     steps:
       - name: Auto-approve PR
         uses: hmarr/auto-approve-action@v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
 
