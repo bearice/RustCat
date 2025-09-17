@@ -42,8 +42,9 @@ jobs:
         id: is-release
         shell: bash
         run: |
-          unset IS_RELEASE ; if [[ $GITHUB_REF =~ ^refs/tags/v[0-9].* ]]; then IS_RELEASE='true' ; fi
-          echo ::set-output name=IS_RELEASE::${IS_RELEASE}
+          unset IS_RELEASE
+          if [[ $GITHUB_REF =~ ^refs/tags/v[0-9].* ]]; then IS_RELEASE='true'; fi
+          echo "IS_RELEASE=${IS_RELEASE}" >> $GITHUB_OUTPUT
 
       - name: Artifact upload (Windows)
         uses: actions/upload-artifact@master
@@ -88,8 +89,9 @@ jobs:
         id: is-release
         shell: bash
         run: |
-          unset IS_RELEASE ; if [[ $GITHUB_REF =~ ^refs/tags/v[0-9].* ]]; then IS_RELEASE='true' ; fi
-          echo ::set-output name=IS_RELEASE::${IS_RELEASE}
+          unset IS_RELEASE
+          if [[ $GITHUB_REF =~ ^refs/tags/v[0-9].* ]]; then IS_RELEASE='true'; fi
+          echo "IS_RELEASE=${IS_RELEASE}" >> $GITHUB_OUTPUT
 
       - name: Upload universal app bundle
         uses: actions/upload-artifact@v4
@@ -123,5 +125,3 @@ jobs:
         uses: hmarr/auto-approve-action@v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-
-
