@@ -4,11 +4,14 @@ on:
   push:
     branches:
       - master
-  pull_request:
+  pull_request_target:
   workflow_dispatch:
   release:
     types: [created, edited]
 
+permissions:
+  pull-requests: write
+  
 jobs:
   #run build first to populate caches
   build-windows:
@@ -89,13 +92,13 @@ jobs:
           echo ::set-output name=IS_RELEASE::${IS_RELEASE}
 
       - name: Upload universal app bundle
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           name: RustCat-universal.app.zip
           path: RustCat-universal.app.zip
 
       - name: Upload universal DMG
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           name: RustCat-universal.dmg
           path: RustCat-universal.dmg
@@ -120,3 +123,4 @@ jobs:
         uses: hmarr/auto-approve-action@v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
