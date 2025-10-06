@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 trayicon = "0.3.0"
-flate2 = "1.0"
+flate2 = "1.1"
 
 
 [target.'cfg(windows)'.dependencies]
@@ -38,7 +38,7 @@ codegen-units = 1      # Reduce code generation units
 panic = "abort"        # Reduce panic code size
 
 [build-dependencies]
-flate2 = "1.0"
+flate2 = "1.1"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
