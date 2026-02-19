@@ -9,8 +9,8 @@ impl SystemIntegration for MacosSystemIntegration {
             .arg("-e")
             .arg(&format!(
                 r#"display dialog "{}" with title "{}" buttons {{"OK"}} default button "OK""#,
-                message.replace("\"", "\\\""),
-                title.replace("\"", "\\\"")
+                message.replace("\\", "\\\\").replace("\"", "\\\""),
+                title.replace("\\", "\\\\").replace("\"", "\\\"")
             ))
             .spawn()?;
         Ok(())
