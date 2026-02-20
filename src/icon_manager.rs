@@ -251,3 +251,16 @@ impl Default for IconManager {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_supports_themes_empty_manager() {
+        let manager = IconManager::new();
+        assert!(!manager.supports_themes("cat"));
+        assert!(!manager.supports_themes("parrot"));
+        assert!(!manager.supports_themes(""));
+    }
+}
