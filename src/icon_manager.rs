@@ -224,7 +224,7 @@ impl IconManager {
     }
 
     // Migration support - convert old numeric IDs to string IDs
-    #[allow(dead_code)]
+    #[cfg(windows)]
     pub fn migrate_from_numeric_id(old_id: usize) -> String {
         let is_cat = (old_id & 2) == 0;
 
@@ -235,7 +235,7 @@ impl IconManager {
         }
     }
 
-    #[allow(dead_code)]
+    #[cfg(windows)]
     pub fn get_theme_from_numeric_id(old_id: usize) -> Theme {
         let is_dark = (old_id & 1) == 0;
         if is_dark {
