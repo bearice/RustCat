@@ -1,5 +1,7 @@
 use std::io;
 
+#[cfg(target_os = "linux")]
+pub mod linux;
 #[cfg(target_os = "macos")]
 pub mod macos;
 #[cfg(windows)]
@@ -35,13 +37,19 @@ pub trait SystemIntegration {
 pub type CpuMonitorImpl = windows::WindowsCpuMonitor;
 #[cfg(target_os = "macos")]
 pub type CpuMonitorImpl = macos::MacosCpuMonitor;
+#[cfg(target_os = "linux")]
+pub type CpuMonitorImpl = linux::LinuxCpuMonitor;
 
 #[cfg(windows)]
 pub type SettingsManagerImpl = windows::WindowsSettingsManager;
 #[cfg(target_os = "macos")]
 pub type SettingsManagerImpl = macos::MacosSettingsManager;
+#[cfg(target_os = "linux")]
+pub type SettingsManagerImpl = linux::LinuxSettingsManager;
 
 #[cfg(windows)]
 pub type SystemIntegrationImpl = windows::WindowsSystemIntegration;
 #[cfg(target_os = "macos")]
 pub type SystemIntegrationImpl = macos::MacosSystemIntegration;
+#[cfg(target_os = "linux")]
+pub type SystemIntegrationImpl = linux::LinuxSystemIntegration;

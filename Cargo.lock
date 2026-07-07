@@ -849,7 +849,7 @@ dependencies = [
 
 [[package]]
 name = "rust_cat"
-version = "2.3.0"
+version = "2.4.0"
 dependencies = [
  "dirs",
  "dispatch",

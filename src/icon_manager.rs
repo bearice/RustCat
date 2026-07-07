@@ -119,6 +119,17 @@ impl IconManager {
                             )
                         })
                     }
+                    #[cfg(target_os = "linux")]
+                    {
+                        // The Linux/KDE backend decodes the ICO and picks the
+                        // largest entry automatically; width/height hints are ignored.
+                        Icon::from_buffer(icon_data, None, None).map_err(|e| {
+                            format!(
+                                "Failed to create icon from buffer for {} {}: {}",
+                                icon_name, theme_str, e
+                            )
+                        })
+                    }
                 }?;
 
                 icons.push(icon);

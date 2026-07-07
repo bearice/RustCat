@@ -115,10 +115,129 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  # Build Linux binary and produce distro packages:
+  # portable .tar.gz, .deb, .rpm, and a portable AppImage.
+  build-linux:
+    name: Build Linux packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Build portable tarball
+        run: ./build_linux.sh
+
+      - name: Install packaging tools
+        run: |
+          # cargo-deb builds .deb packages
+          cargo install --locked cargo-deb
+          # cargo-generate-rpm builds .rpm packages
+          cargo install --locked cargo-generate-rpm
+
+      - name: Build .deb
+        run: cargo deb --no-strip --output RustCat-linux-x86_64.deb
+
+      - name: Build .rpm
+        run: cargo generate-rpm
+
+      - name: Stage .rpm artifact
+        shell: bash
+        run: |
+          mkdir -p rpm-out
+          cp target/generate-rpm/*.rpm rpm-out/RustCat-linux-x86_64.rpm
+
+      - name: Build AppImage
+        shell: bash
+        run: |
+          set -e
+          mkdir -p appimage/AppDir/usr/bin
+          mkdir -p appimage/AppDir/usr/share/applications
+          mkdir -p appimage/AppDir/usr/share/icons
+          cp target/release/rust_cat appimage/AppDir/usr/bin/
+          cp assets/rustcat.desktop appimage/AppDir/usr/share/applications/
+          cp assets/appIcon.ico appimage/AppDir/usr/share/icons/rustcat.ico
+          # AppImage desktop entry must point to the binary inside the AppDir
+          sed -i 's|^Exec=.*|Exec=rust_cat|' appimage/AppDir/usr/share/applications/rustcat.desktop
+
+          ARCH=$(uname -m)
+          export VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          export OUTPUT=RustCat-${VERSION}-${ARCH}.AppImage
+          wget -qO linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/latest/download/linuxdeploy-${ARCH}.AppImage
+          chmod +x linuxdeploy
+          ./linuxdeploy --appdir appimage/AppDir \
+            --desktop-file appimage/AppDir/usr/share/applications/rustcat.desktop \
+            --icon-file appimage/AppDir/usr/share/icons/rustcat.ico \
+            --output appimage
+          mv appimage/*.AppImage "${OUTPUT}"
+
+      - name: Check for release
+        id: is-release
+        shell: bash
+        run: |
+          unset IS_RELEASE
+          if [[ $GITHUB_REF =~ ^refs/tags/v[0-9].* ]]; then IS_RELEASE='true'; fi
+          echo "IS_RELEASE=${IS_RELEASE}" >> $GITHUB_OUTPUT
+
+      - name: Upload Linux tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: RustCat-linux-x86_64.tar.gz
+          path: RustCat-*.tar.gz
+          if-no-files-found: error
+
+      - name: Upload Linux .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: RustCat-linux-x86_64.deb
+          path: RustCat-linux-x86_64.deb
+          if-no-files-found: error
+
+      - name: Upload Linux .rpm
+        uses: actions/upload-artifact@v4
+        with:
+          name: RustCat-linux-x86_64.rpm
+          path: rpm-out/RustCat-linux-x86_64.rpm
+          if-no-files-found: error
+
+      - name: Upload Linux AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: RustCat-x86_64.AppImage
+          path: RustCat-*.AppImage
+          if-no-files-found: error
+
+      - name: Publish Linux release
+        uses: softprops/action-gh-release@v1
+        if: steps.is-release.outputs.IS_RELEASE
+        with:
+          files: |
+            RustCat-*.tar.gz
+            RustCat-linux-x86_64.deb
+            rpm-out/RustCat-linux-x86_64.rpm
+            RustCat-*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   # Auto-approve Dependabot PRs if build succeeds
   dependabot-auto-approve:
     runs-on: ubuntu-latest
-    needs: [build-windows, build-macos]
+    needs: [build-windows, build-macos, build-linux]
     if: github.actor == 'dependabot[bot]' && github.event_name == 'pull_request_target'
     steps:
       - name: Auto-approve PR

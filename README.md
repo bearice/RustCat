@@ -16,12 +16,44 @@ Speedy Cat Visuals: Watch your system load as a tiny cat dashes across your task
 
 No Runtime Baggage: Written in Rust, so it’s leaner than a whisker. (In human language: It's small and uses less memory.)
 
-Platform Flair: Supports Windows and macOS with native theme detection.
+Platform Flair: Supports Windows, macOS, and Linux/KDE with native theme detection.
 
 Auto Theme Matching: Your cat’s colors shift with your system's light/dark mode — drama-free style.
 
 ## 🧩 Installation
 Visit the [Releases page](https://github.com/bearice/RustCat/releases) and grab the file. Double-click, and let the cat out.
+
+### Linux / KDE
+
+On Linux the tray icon uses the freedesktop StatusNotifierItem (SNI) protocol over D-Bus, so it integrates natively with KDE Plasma's system tray.
+
+```bash
+# from source (needs a Rust toolchain)
+cargo build --release
+# the binary is at target/release/rust_cat
+```
+
+### Nix / NixOS
+
+A `flake.nix` is provided:
+
+```bash
+# run directly
+nix run github:bearice/RustCat
+
+# build into a profile / your config
+nix build .#default
+# -> result/bin/rust_cat, plus result/share/applications/rustcat.desktop
+
+# dev shell
+nix develop
+```
+
+Runtime helper tools (`kdialog`, `plasma-systemmonitor`) are wrapped onto `PATH` automatically; the app degrades gracefully if a tool is missing.
+
+> Build note for packagers: the repo's `.cargo/config.toml` only enables
+> `crt-static` on Windows. On Linux the build links dynamically against glibc,
+> which is what most distros (and Nix) expect.
 
 ## 💬 Quote from the Dev
 “RustCat doesn’t monitor your CPU. It vibes with it.” — Bearice

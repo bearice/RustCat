@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=RustCat
+Comment=CPU usage monitor with an animated tray cat
+Exec=rust_cat
+Icon=rustcat
+Terminal=false
+Categories=System;Monitor;
+Keywords=CPU;monitor;tray;cat;
