@@ -1,7 +1,14 @@
 [package]
 name = "rust_cat"
-version = "2.3.0"
+version = "2.4.0"
 edition = "2021"
+description = "An animated tray cat (or parrot) whose animation speed tracks real-time CPU usage"
+license = "Apache-2.0"
+authors = ["Bearice Ren"]
+repository = "https://github.com/bearice/RustCat"
+homepage = "https://github.com/bearice/RustCat"
+keywords = ["tray", "cpu", "monitor", "cat", "kde"]
+categories = ["system-monitoring", "gui"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,6 +19,9 @@ flate2 = "1.1"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+dirs = "6.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
@@ -47,3 +57,42 @@ winres = "0.1"
 OriginalFilename = "rust_cat.exe"
 FileDescription = "💻 => 🐈😺😸😹😻😼😽🐈‍⬛"
 LegalCopyright = "Copyright © 2021 Bearice Ren <https://github.com/bearice/RustCat>"
+
+# --- Debian package metadata (cargo-deb) ---
+# Build with: cargo deb
+[package.metadata.deb]
+name = "rustcat"
+maintainer = "Bearice Ren <https://github.com/bearice/RustCat>"
+copyright = "2021-2026, Bearice Ren <https://github.com/bearice/RustCat>"
+section = "utils"
+priority = "optional"
+extended-description = """\
+RustCat is a lightweight tray application that displays an animated cat or \
+parrot icon whose animation speed reflects real-time CPU usage. On Linux it \
+integrates with KDE Plasma's system tray via the freedesktop \
+StatusNotifierItem (SNI) protocol over D-Bus."""
+# The binary only needs the standard C runtime; the helper tools are
+# recommended (the app degrades gracefully if they are absent).
+depends = "$auto"
+recommends = "kdialog, plasma-systemmonitor | ksysguard | gnome-system-monitor"
+assets = [
+    ["target/release/rust_cat", "usr/bin/", "755"],
+    ["assets/rustcat.desktop", "usr/share/applications/", "644"],
+    ["assets/appIcon.ico", "usr/share/icons/rustcat.ico", "644"],
+    ["README.md", "usr/share/doc/rustcat/README", "644"],
+    ["LICENSE", "usr/share/doc/rustcat/LICENSE", "644"],
+]
+
+# --- RPM package metadata (cargo-generate-rpm) ---
+# Build with: cargo generate-rpm
+[package.metadata.generate-rpm]
+name = "rustcat"
+license = "Apache-2.0"
+summary = "Animated tray cat whose speed tracks CPU usage"
+description = "RustCat displays an animated cat or parrot tray icon whose animation speed reflects real-time CPU usage. Integrates with KDE Plasma via the StatusNotifierItem D-Bus protocol."
+recommends = ["kdialog", "plasma-systemmonitor"]
+assets = [
+    { source = "target/release/rust_cat", dest = "/usr/bin/rust_cat", mode = "755" },
+    { source = "assets/rustcat.desktop", dest = "/usr/share/applications/rustcat.desktop", mode = "644" },
+    { source = "assets/appIcon.ico", dest = "/usr/share/icons/rustcat.ico", mode = "644" },
+]

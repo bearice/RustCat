@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-07-07
+
+### Added
+
+- Linux/KDE support via the freedesktop StatusNotifierItem (SNI) protocol over
+  D-Bus — the tray cat now runs natively on KDE Plasma (and other SNI-aware
+  trays)
+- Linux platform module mirroring the Windows/macOS architecture: CPU usage
+  from `/proc/stat`, settings persisted to `~/.config/rustcat/settings.conf`,
+  autostart via a freedesktop `~/.config/autostart/rustcat.desktop` file
+- Native KDE integration: dark/light theme detection via `kreadconfig`,
+  dialogs via `kdialog`, system monitor via `plasma-systemmonitor`
+- Nix flake (`flake.nix`) using crane, with `packages`, `devShells`, and `apps`
+  outputs; runtime helper tools wrapped onto `PATH`
+- Distro packaging for Linux: `.deb` (cargo-deb), `.rpm` (cargo-generate-rpm),
+  and a portable AppImage (linuxdeploy), all built in CI alongside the
+  portable `.tar.gz` bundle
+- `assets/rustcat.desktop` freedesktop entry and `build_linux.sh` build script
+
+### Changed
+
+- Scoped the `crt-static` rustflag to Windows only (`.cargo/config.toml`); it
+  was intended for MSVC static linking and forced static-glibc linking on
+  Linux, which most distros (and Nix) don't provide
+- Refactored `ui_update` in `app.rs` to apply to all non-macOS targets
+  (Windows + Linux), since the trayicon D-Bus backend is thread-safe
+- Added standard crates.io metadata (description, license, repository,
+  keywords, categories) to `Cargo.toml`
+
+### Fixed
+
+- Linux builds now link dynamically against glibc instead of failing on
+  missing static libc
+
 ## [2.3.0] - 2025-07-10
 
 ### Added

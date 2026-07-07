@@ -12,6 +12,8 @@ use crate::{
 
 #[cfg(target_os = "macos")]
 use crate::platform::macos::app::MacosApp;
+#[cfg(target_os = "linux")]
+use crate::platform::linux::app::LinuxApp;
 #[cfg(windows)]
 use crate::platform::windows::app::WindowsApp;
 
@@ -37,6 +39,8 @@ fn main() {
     let app = WindowsApp::new(icon_manager, &icon_name, Some(theme)).expect("Failed to create app");
     #[cfg(target_os = "macos")]
     let app = MacosApp::new(icon_manager, &icon_name, Some(theme)).expect("Failed to create app");
+    #[cfg(target_os = "linux")]
+    let app = LinuxApp::new(icon_manager, &icon_name, Some(theme)).expect("Failed to create app");
 
     app.start_animation_thread();
 

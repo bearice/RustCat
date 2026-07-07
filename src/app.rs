@@ -25,9 +25,11 @@ use dispatch;
 fn ui_update<F: FnOnce() + Send + 'static>(f: F) {
     dispatch::Queue::main().exec_async(f);
 }
-#[cfg(windows)]
+// Windows and Linux (D-Bus StatusNotifierItem) do not require UI updates
+// to be dispatched on a specific thread — the trayicon backend handles
+// thread-safety internally.
+#[cfg(not(target_os = "macos"))]
 fn ui_update<F: FnOnce() + Send + 'static>(f: F) {
-    // Windows does not require special handling for UI updates
     f();
 }
 pub struct App {

@@ -1,2 +1,5 @@
-[build]
+# Static-link the C runtime so the Windows .exe ships with zero runtime
+# dependencies (msvcrt). Scoped to Windows only — on Linux/macOS forcing
+# crt-static pulls in static libc which most systems don't ship.
+[target.'cfg(windows)']
 rustflags = ["-C", "target-feature=+crt-static"]
