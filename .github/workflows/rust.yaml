@@ -167,9 +167,11 @@ jobs:
           cp target/generate-rpm/*.rpm rpm-out/RustCat-linux-x86_64.rpm
 
       - name: Build AppImage
-        # Best-effort: linuxdeploy + an AppImage-from-AppImage bootstrap can be
-        # finicky in CI. A failure here must not block the core deb/rpm/tarball
-        # artifacts, so this step is allowed to fail and its upload is lenient.
+        # Best-effort: linuxdeploy's CImg-based icon deploy cannot read .ico,
+        # and the ubuntu runner ships no ImageMagick, so a pre-generated
+        # rustcat.png is committed to the repo and used directly here. This
+        # step is allowed to fail and its upload is lenient so a flaky
+        # AppImage never blocks the core deb/rpm/tarball artifacts.
         continue-on-error: true
         shell: bash
         run: |
@@ -179,22 +181,7 @@ jobs:
           mkdir -p appimage/AppDir/usr/share/icons
           cp target/release/rust_cat appimage/AppDir/usr/bin/
           cp assets/rustcat.desktop appimage/AppDir/usr/share/applications/
-
-          # linuxdeploy prefers a PNG icon; convert the multi-resolution ICO
-          # with whichever ImageMagick binary the runner ships (v7: magick,
-          # v6: convert). Fall back to the raw .ico if neither is present.
-          ICON_ARG=()
-          if command -v magick >/dev/null 2>&1; then
-            magick assets/appIcon.ico appimage/AppDir/usr/share/icons/rustcat.png
-            ICON_ARG=(--icon-file appimage/AppDir/usr/share/icons/rustcat.png)
-          elif command -v convert >/dev/null 2>&1; then
-            convert assets/appIcon.ico appimage/AppDir/usr/share/icons/rustcat.png
-            ICON_ARG=(--icon-file appimage/AppDir/usr/share/icons/rustcat.png)
-          else
-            cp assets/appIcon.ico appimage/AppDir/usr/share/icons/rustcat.ico
-            ICON_ARG=(--icon-file appimage/AppDir/usr/share/icons/rustcat.ico)
-          fi
-
+          cp assets/rustcat.png appimage/AppDir/usr/share/icons/rustcat.png
           # AppImage desktop entry must point to the binary inside the AppDir
           sed -i 's|^Exec=.*|Exec=rust_cat|' appimage/AppDir/usr/share/applications/rustcat.desktop
 
@@ -210,7 +197,7 @@ jobs:
           fi
           ./linuxdeploy --appdir appimage/AppDir \
             --desktop-file appimage/AppDir/usr/share/applications/rustcat.desktop \
-            "${ICON_ARG[@]}" \
+            --icon-file appimage/AppDir/usr/share/icons/rustcat.png \
             --output appimage
           mv appimage/*.AppImage "${OUTPUT}"
 
