@@ -167,6 +167,10 @@ jobs:
           cp target/generate-rpm/*.rpm rpm-out/RustCat-linux-x86_64.rpm
 
       - name: Build AppImage
+        # Best-effort: linuxdeploy + an AppImage-from-AppImage bootstrap can be
+        # finicky in CI. A failure here must not block the core deb/rpm/tarball
+        # artifacts, so this step is allowed to fail and its upload is lenient.
+        continue-on-error: true
         shell: bash
         run: |
           set -e
@@ -175,7 +179,22 @@ jobs:
           mkdir -p appimage/AppDir/usr/share/icons
           cp target/release/rust_cat appimage/AppDir/usr/bin/
           cp assets/rustcat.desktop appimage/AppDir/usr/share/applications/
-          cp assets/appIcon.ico appimage/AppDir/usr/share/icons/rustcat.ico
+
+          # linuxdeploy prefers a PNG icon; convert the multi-resolution ICO
+          # with whichever ImageMagick binary the runner ships (v7: magick,
+          # v6: convert). Fall back to the raw .ico if neither is present.
+          ICON_ARG=()
+          if command -v magick >/dev/null 2>&1; then
+            magick assets/appIcon.ico appimage/AppDir/usr/share/icons/rustcat.png
+            ICON_ARG=(--icon-file appimage/AppDir/usr/share/icons/rustcat.png)
+          elif command -v convert >/dev/null 2>&1; then
+            convert assets/appIcon.ico appimage/AppDir/usr/share/icons/rustcat.png
+            ICON_ARG=(--icon-file appimage/AppDir/usr/share/icons/rustcat.png)
+          else
+            cp assets/appIcon.ico appimage/AppDir/usr/share/icons/rustcat.ico
+            ICON_ARG=(--icon-file appimage/AppDir/usr/share/icons/rustcat.ico)
+          fi
+
           # AppImage desktop entry must point to the binary inside the AppDir
           sed -i 's|^Exec=.*|Exec=rust_cat|' appimage/AppDir/usr/share/applications/rustcat.desktop
 
@@ -184,9 +203,14 @@ jobs:
           export OUTPUT=RustCat-${VERSION}-${ARCH}.AppImage
           wget -qO linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/latest/download/linuxdeploy-${ARCH}.AppImage
           chmod +x linuxdeploy
+          # Some runners can't run nested AppImages directly; fall back to
+          # extracting and running via the AppRun wrapper if FUSE is unavailable.
+          if ! ./linuxdeploy --version >/dev/null 2>&1; then
+            export APPIMAGE_EXTRACT_AND_RUN=1
+          fi
           ./linuxdeploy --appdir appimage/AppDir \
             --desktop-file appimage/AppDir/usr/share/applications/rustcat.desktop \
-            --icon-file appimage/AppDir/usr/share/icons/rustcat.ico \
+            "${ICON_ARG[@]}" \
             --output appimage
           mv appimage/*.AppImage "${OUTPUT}"
 
@@ -220,11 +244,12 @@ jobs:
           if-no-files-found: error
 
       - name: Upload Linux AppImage
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: RustCat-x86_64.AppImage
           path: RustCat-*.AppImage
-          if-no-files-found: error
+          if-no-files-found: ignore
 
       - name: Publish Linux release
         uses: softprops/action-gh-release@v1
