@@ -78,7 +78,7 @@ recommends = "kdialog, plasma-systemmonitor | ksysguard | gnome-system-monitor"
 assets = [
     ["target/release/rust_cat", "usr/bin/", "755"],
     ["assets/rustcat.desktop", "usr/share/applications/", "644"],
-    ["assets/appIcon.ico", "usr/share/icons/rustcat.ico", "644"],
+    ["assets/appIcon.ico", "usr/share/pixmaps/rustcat.ico", "644"],
     ["README.md", "usr/share/doc/rustcat/README", "644"],
     ["LICENSE", "usr/share/doc/rustcat/LICENSE", "644"],
 ]
@@ -94,5 +94,5 @@ recommends = ["kdialog", "plasma-systemmonitor"]
 assets = [
     { source = "target/release/rust_cat", dest = "/usr/bin/rust_cat", mode = "755" },
     { source = "assets/rustcat.desktop", dest = "/usr/share/applications/rustcat.desktop", mode = "644" },
-    { source = "assets/appIcon.ico", dest = "/usr/share/icons/rustcat.ico", mode = "644" },
+    { source = "assets/appIcon.ico", dest = "/usr/share/pixmaps/rustcat.ico", mode = "644" },
 ]

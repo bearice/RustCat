@@ -44,12 +44,16 @@ impl SettingsManager for LinuxSettingsManager {
         if enable {
             if let Ok(exe_path) = std::env::current_exe() {
                 let exe_str = exe_path.to_string_lossy().to_string();
+                // Escape the Exec value per the freedesktop Desktop Entry spec so
+                // paths containing spaces / other reserved metacharacters still
+                // launch the binary at login.
+                let exec_value = escape_exec_value(&exe_str);
                 let desktop_content = format!(
                     "[Desktop Entry]\n\
 Type=Application\n\
 Name=RustCat\n\
 Comment=CPU usage monitor tray cat\n\
-Exec={exe_str}\n\
+Exec={exec_value}\n\
 Icon=rustcat\n\
 Terminal=false\n\
 X-KDE-autostart-phase=2\n\
@@ -127,6 +131,24 @@ fn config_dir() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("/tmp"))
         .join("rustcat")
+}
+
+/// Escape a string for use as the value of a freedesktop desktop entry `Exec`
+/// key. Reserved characters must be backslash-escaped, otherwise a path with
+/// spaces (e.g. `/home/me/Rust Cat/rust_cat`) is split into tokens at login.
+fn escape_exec_value(s: &str) -> String {
+    const RESERVED: &[char] = &[
+        ' ', '\t', '"', '\'', '\\', '`', '$', '*', '?', '#', '(', ')', '>', '<',
+        '~', '|', '&', ';',
+    ];
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        if RESERVED.contains(&ch) {
+            out.push('\\');
+        }
+        out.push(ch);
+    }
+    out
 }
 
 fn settings_path() -> PathBuf {

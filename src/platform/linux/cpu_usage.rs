@@ -38,7 +38,9 @@ impl CpuMonitor for LinuxCpuMonitor {
             let total_diff = total - prev_total;
             let idle_diff = idle - prev_idle;
             if total_diff > 0.0 {
-                100.0 - (idle_diff / total_diff * 100.0)
+                // Clamp to [0, 100] — /proc counters can be non-monotonic on
+                // VMs / after suspend, yielding spurious negative or >100 values.
+                (100.0 - (idle_diff / total_diff * 100.0)).clamp(0.0, 100.0)
             } else {
                 0.0
             }

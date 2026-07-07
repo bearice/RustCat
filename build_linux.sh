@@ -29,11 +29,11 @@ file target/release/${BIN_NAME}
 # Assemble a redistributable package directory
 echo "🎨 Assembling package..."
 rm -rf "${PKG_DIR}"
-mkdir -p "${PKG_DIR}/bin" "${PKG_DIR}/share/applications" "${PKG_DIR}/share/icons"
+mkdir -p "${PKG_DIR}/bin" "${PKG_DIR}/share/applications" "${PKG_DIR}/share/pixmaps"
 
 cp target/release/${BIN_NAME} "${PKG_DIR}/bin/"
 cp assets/rustcat.desktop "${PKG_DIR}/share/applications/"
-cp assets/appIcon.ico "${PKG_DIR}/share/icons/rustcat.ico"
+cp assets/appIcon.ico "${PKG_DIR}/share/pixmaps/rustcat.ico"
 
 # A small install/uninstall helper for users not on Nix
 cat > "${PKG_DIR}/install.sh" <<'INSTALL_EOF'
@@ -45,7 +45,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 install -Dm755 "${SCRIPT_DIR}/bin/rust_cat" "${PREFIX}/bin/rust_cat"
 install -Dm644 "${SCRIPT_DIR}/share/applications/rustcat.desktop" "${PREFIX}/share/applications/rustcat.desktop"
-install -Dm644 "${SCRIPT_DIR}/share/icons/rustcat.ico" "${PREFIX}/share/icons/rustcat.ico"
+install -Dm644 "${SCRIPT_DIR}/share/pixmaps/rustcat.ico" "${PREFIX}/share/pixmaps/rustcat.ico"
 
 echo "Installed RustCat to ${PREFIX}. Run with: rust_cat"
 INSTALL_EOF

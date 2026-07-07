@@ -62,7 +62,10 @@
         rustCat = craneLib.buildPackage {
           inherit src cargoArtifacts nativeBuildInputs;
           pname = "rustcat";
-          version = "2.3.0";
+          # version is intentionally omitted: crane derives it from Cargo.toml
+          # (buildPackage: `version = args.version or crateName.version`), so
+          # the Nix output name stays in sync with the crate version instead of
+          # drifting after a bump.
           # No tests in this project.
           doCheck = false;
           env = cargoBuildEnv;
@@ -73,9 +76,10 @@
             wrapProgram $out/bin/rust_cat \
               --prefix PATH : ${pkgs.lib.makeBinPath runtimeDeps}
 
-            # Desktop entry + icon for application launchers.
+            # Desktop entry + icon for application launchers. The icon goes to
+            # pixmaps/ (the freedesktop location for non-themed icons).
             install -Dm644 ${self}/assets/rustcat.desktop $out/share/applications/rustcat.desktop
-            install -Dm644 ${self}/assets/appIcon.ico $out/share/icons/rustcat.ico
+            install -Dm644 ${self}/assets/appIcon.ico $out/share/pixmaps/rustcat.ico
           '';
         };
       in
