@@ -150,9 +150,9 @@ jobs:
       - name: Install packaging tools
         run: |
           # cargo-deb builds .deb packages
-          cargo install --locked cargo-deb
+          cargo install --locked --force cargo-deb
           # cargo-generate-rpm builds .rpm packages
-          cargo install --locked cargo-generate-rpm
+          cargo install --locked --force cargo-generate-rpm
 
       - name: Build .deb
         run: cargo deb --no-strip --output RustCat-linux-x86_64.deb
