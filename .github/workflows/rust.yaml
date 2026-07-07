@@ -10,8 +10,12 @@ on:
     types: [created, edited]
 
 permissions:
+  # contents: write is required by softprops/action-gh-release to upload
+  # assets to a GitHub release. Specifying any permission makes all others
+  # default to none, so this must be listed explicitly.
+  contents: write
   pull-requests: write
-  
+
 jobs:
   #run build first to populate caches
   build-windows:

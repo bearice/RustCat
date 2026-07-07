@@ -90,9 +90,15 @@ name = "rustcat"
 license = "Apache-2.0"
 summary = "Animated tray cat whose speed tracks CPU usage"
 description = "RustCat displays an animated cat or parrot tray icon whose animation speed reflects real-time CPU usage. Integrates with KDE Plasma via the StatusNotifierItem D-Bus protocol."
-recommends = ["kdialog", "plasma-systemmonitor"]
 assets = [
     { source = "target/release/rust_cat", dest = "/usr/bin/rust_cat", mode = "755" },
     { source = "assets/rustcat.desktop", dest = "/usr/share/applications/rustcat.desktop", mode = "644" },
     { source = "assets/appIcon.ico", dest = "/usr/share/pixmaps/rustcat.ico", mode = "644" },
 ]
+
+# Dependency fields in cargo-generate-rpm use a table section (not inline
+# arrays), per the 0.21 docs. Each key is a package, each value a version
+# constraint ("*" = any). These are soft runtime hints.
+[package.metadata.generate-rpm.recommends]
+kdialog = "*"
+plasma-systemmonitor = "*"
