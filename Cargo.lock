@@ -1061,9 +1061,9 @@ dependencies = [
 
 [[package]]
 name = "trayicon"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8b4b2bb82da017c94c93d13dc8fbf694a7b73fdfc973441adccab63d221c522"
+checksum = "1e4323bcdb413ca07ff0a44aa79afe14e8fa0eee7655f1496347ed05a95385e8"
 dependencies = [
  "futures",
  "ico",
