@@ -121,9 +121,20 @@ jobs:
 
   # Build Linux binary and produce distro packages:
   # portable .tar.gz, .deb, .rpm, and a portable AppImage.
+  # Runs natively on x86_64 and arm64 runners so every package is built for
+  # its target arch (no cross-compilation). arm64 uses the free public
+  # ubuntu-24.04-arm runner; arch labels follow uname -m (x86_64 / aarch64).
   build-linux:
-    name: Build Linux packages
-    runs-on: ubuntu-latest
+    name: Build Linux packages (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -134,7 +145,10 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          # Caches are arch-specific (~/.cargo/bin and target/ hold native
+          # binaries), so scope the key by arch to avoid poisoning one arch's
+          # cache with the other's.
+          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -155,7 +169,7 @@ jobs:
           cargo install --locked --force cargo-generate-rpm
 
       - name: Build .deb
-        run: cargo deb --no-strip --output RustCat-linux-x86_64.deb
+        run: cargo deb --no-strip --output RustCat-linux-${{ matrix.arch }}.deb
 
       - name: Build .rpm
         run: cargo generate-rpm
@@ -164,7 +178,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p rpm-out
-          cp target/generate-rpm/*.rpm rpm-out/RustCat-linux-x86_64.rpm
+          cp target/generate-rpm/*.rpm rpm-out/RustCat-linux-${{ matrix.arch }}.rpm
 
       - name: Build AppImage
         # Best-effort: linuxdeploy's CImg-based icon deploy cannot read .ico,
@@ -212,29 +226,29 @@ jobs:
       - name: Upload Linux tarball
         uses: actions/upload-artifact@v4
         with:
-          name: RustCat-linux-x86_64.tar.gz
+          name: RustCat-linux-${{ matrix.arch }}.tar.gz
           path: RustCat-*.tar.gz
           if-no-files-found: error
 
       - name: Upload Linux .deb
         uses: actions/upload-artifact@v4
         with:
-          name: RustCat-linux-x86_64.deb
-          path: RustCat-linux-x86_64.deb
+          name: RustCat-linux-${{ matrix.arch }}.deb
+          path: RustCat-linux-${{ matrix.arch }}.deb
           if-no-files-found: error
 
       - name: Upload Linux .rpm
         uses: actions/upload-artifact@v4
         with:
-          name: RustCat-linux-x86_64.rpm
-          path: rpm-out/RustCat-linux-x86_64.rpm
+          name: RustCat-linux-${{ matrix.arch }}.rpm
+          path: rpm-out/RustCat-linux-${{ matrix.arch }}.rpm
           if-no-files-found: error
 
       - name: Upload Linux AppImage
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: RustCat-x86_64.AppImage
+          name: RustCat-${{ matrix.arch }}.AppImage
           path: RustCat-*.AppImage
           if-no-files-found: ignore
 
@@ -244,8 +258,8 @@ jobs:
         with:
           files: |
             RustCat-*.tar.gz
-            RustCat-linux-x86_64.deb
-            rpm-out/RustCat-linux-x86_64.rpm
+            RustCat-linux-*.deb
+            rpm-out/RustCat-linux-*.rpm
             RustCat-*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
