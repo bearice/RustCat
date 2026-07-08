@@ -23,7 +23,10 @@ and this project adheres to
 - Distro packaging for Linux: `.deb` (cargo-deb), `.rpm` (cargo-generate-rpm),
   and a portable AppImage (linuxdeploy), all built in CI alongside the
   portable `.tar.gz` bundle
-- `assets/rustcat.desktop` freedesktop entry and `build_linux.sh` build script
+- Linux packages are built for both `x86_64` and `aarch64` (arm64) in CI,
+  using native GitHub arm64 runners — no cross-compilation
+- `assets/rustcat.desktop` freedesktop entry, `assets/rustcat.png` launcher
+  icon, and `build_linux.sh` build script
 
 ### Changed
 
