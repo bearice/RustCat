@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1] - 2026-07-13
+
+### Fixed
+
+- **Launcher icon not showing on KDE/GNOME.** The `.desktop` entry references
+  `Icon=rustcat`, but the `.deb`, `.rpm`, and portable tarball all shipped
+  `assets/appIcon.ico` as `usr/share/pixmaps/rustcat.ico`. The freedesktop
+  icon-name lookup does not support `.ico`, so launchers fell back to a generic
+  icon. All three packaging paths now install the existing 256×256
+  `assets/rustcat.png` into
+  `usr/share/icons/hicolor/256x256/apps/rustcat.png`, and `install.sh` refreshes
+  the icon cache. The AppImage already used the PNG and was unaffected.
+- **About menu item did nothing.** The about message used `\\n` (literal
+  backslash-n) instead of a real newline, so the dialog rendered an embedded
+  `\n` (cross-platform — Windows `MessageBoxW` was affected too). On Linux,
+  `show_dialog` used fire-and-forget `spawn()` and returned `Ok` as soon as
+  `kdialog` spawned, without checking whether it actually displayed; if
+  `kdialog` spawned but exited non-zero (no display / D-Bus session),
+  `zenity`/`xmessage` were never tried and the user saw nothing. Switched to
+  blocking `status()` so a non-zero exit falls through to the next tool;
+  `status()` also reaps the child, so no zombie accumulates.
+- **Per-second journal log spam when launched from a desktop entry.** The
+  animation thread printed `CPU Usage: ... speed: ...` every second via
+  `println!`, which lands in the systemd journal when stdout is not a TTY.
+  Added `src/logging.rs` with a `debug!` macro that only emits informational
+  logs when stdout is a TTY or `RUSTCAT_DEBUG` / `RUST_LOG` is set (resolved
+  once via `OnceLock`). Gated all routine informational prints behind it;
+  genuine error `eprintln!` are left unchanged so failures still surface in the
+  journal. To see logs when debugging: `RUSTCAT_DEBUG=1 rust_cat` or run
+  `rust_cat` directly in a terminal.
+
 ## [2.4.0] - 2026-07-07
 
 ### Added

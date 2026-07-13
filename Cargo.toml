@@ -1,6 +1,6 @@
 [package]
 name = "rust_cat"
-version = "2.4.0"
+version = "2.4.1"
 edition = "2021"
 description = "An animated tray cat (or parrot) whose animation speed tracks real-time CPU usage"
 license = "Apache-2.0"
