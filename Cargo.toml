@@ -78,7 +78,10 @@ recommends = "kdialog, plasma-systemmonitor | ksysguard | gnome-system-monitor"
 assets = [
     ["target/release/rust_cat", "usr/bin/", "755"],
     ["assets/rustcat.desktop", "usr/share/applications/", "644"],
-    ["assets/appIcon.ico", "usr/share/pixmaps/rustcat.ico", "644"],
+    # Install the 256x256 PNG into the hicolor icon theme so KDE/GNOME
+    # launchers can resolve Icon=rustcat. .ico is not a supported format
+    # for the freedesktop icon-name lookup and shows a generic icon.
+    ["assets/rustcat.png", "usr/share/icons/hicolor/256x256/apps/rustcat.png", "644"],
     ["README.md", "usr/share/doc/rustcat/README", "644"],
     ["LICENSE", "usr/share/doc/rustcat/LICENSE", "644"],
 ]
@@ -93,7 +96,8 @@ description = "RustCat displays an animated cat or parrot tray icon whose animat
 assets = [
     { source = "target/release/rust_cat", dest = "/usr/bin/rust_cat", mode = "755" },
     { source = "assets/rustcat.desktop", dest = "/usr/share/applications/rustcat.desktop", mode = "644" },
-    { source = "assets/appIcon.ico", dest = "/usr/share/pixmaps/rustcat.ico", mode = "644" },
+    # hicolor PNG so launchers resolve Icon=rustcat (.ico is unsupported).
+    { source = "assets/rustcat.png", dest = "/usr/share/icons/hicolor/256x256/apps/rustcat.png", mode = "644" },
 ]
 
 # Dependency fields in cargo-generate-rpm use a table section (not inline

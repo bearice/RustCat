@@ -3,6 +3,7 @@
 mod app;
 mod events;
 mod icon_manager;
+mod logging;
 mod platform;
 
 use crate::{

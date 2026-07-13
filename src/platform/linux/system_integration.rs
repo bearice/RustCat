@@ -6,16 +6,36 @@ pub struct LinuxSystemIntegration;
 impl SystemIntegration for LinuxSystemIntegration {
     fn show_dialog(message: &str, title: &str) -> Result<(), Box<dyn std::error::Error>> {
         // Prefer KDE's kdialog, fall back to zenity, then xmessage.
-        if try_spawn(Command::new("kdialog").arg("--title").arg(title).arg("--msgbox").arg(message)) {
+        //
+        // We block on the child's exit status rather than fire-and-forget
+        // spawning: a tool may spawn successfully yet exit non-zero (e.g.
+        // kdialog with no display/D-Bus session), and we must fall through to
+        // the next tool instead of silently succeeding with nothing shown.
+        // Blocking is fine here — the tray animation runs on its own thread,
+        // so only menu event processing pauses while this modal dialog is up.
+        // status() also reaps the child, so no zombie accumulates.
+        let mut kdialog = Command::new("kdialog");
+        kdialog
+            .arg("--title")
+            .arg(title)
+            .arg("--msgbox")
+            .arg(message);
+        if run_dialog(&mut kdialog) {
             return Ok(());
         }
-        if try_spawn(Command::new("zenity").args(["--title", title, "--info", "--text", message])) {
+        let mut zenity = Command::new("zenity");
+        zenity.args(["--title", title, "--info", "--text", message]);
+        if run_dialog(&mut zenity) {
             return Ok(());
         }
-        if try_spawn(Command::new("xmessage").args(["-title", title, message])) {
+        let mut xmessage = Command::new("xmessage");
+        xmessage.args(["-title", title, message]);
+        if run_dialog(&mut xmessage) {
             return Ok(());
         }
-        // Last resort: just print to stderr
+
+        // Last resort: print to stderr so the message is at least visible
+        // somewhere (journal / terminal that launched the app).
         eprintln!("{}: {}", title, message);
         Ok(())
     }
@@ -47,6 +67,17 @@ impl SystemIntegration for LinuxSystemIntegration {
             .trim()
             .parse()
             .unwrap_or(0)
+    }
+}
+
+/// Run a modal dialog tool to completion and return `true` if it displayed
+/// successfully. Returns `false` both when the tool is not installed (spawn
+/// failed) and when it spawned but exited non-zero (e.g. no display) so the
+/// caller can fall through to the next tool. `status()` reaps the child.
+fn run_dialog(cmd: &mut Command) -> bool {
+    match cmd.status() {
+        Ok(status) => status.success(),
+        Err(_) => false,
     }
 }
 

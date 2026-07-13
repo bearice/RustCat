@@ -8,6 +8,7 @@ use crate::events::{build_menu, Events};
 use crate::icon_manager::{IconManager, Theme};
 use crate::platform::{CpuMonitor, SettingsManager, SystemIntegration};
 use crate::platform::{CpuMonitorImpl, SettingsManagerImpl, SystemIntegrationImpl};
+use crate::debug;
 
 use trayicon::*;
 
@@ -144,7 +145,7 @@ impl App {
                         }
                     };
                     speed = (200.0 / (usage / 5.0).clamp(1.0_f64, 20.0_f64)).round() as u64;
-                    println!("CPU Usage: {:.2}% speed: {}", usage, speed);
+                    debug!("CPU Usage: {:.2}% speed: {}", usage, speed);
 
                     // Check if CPU is idle (less than 5% usage) and it's sleep time (22:00-6:00)
                     if usage < 5.0 && is_sleep_time() {
@@ -152,7 +153,7 @@ impl App {
                         if idle_counter >= idle_threshold && !is_sleeping {
                             is_sleeping = true;
                             icon_index = 0; // Reset animation to start from first sleeping frame
-                            println!("CPU has been idle for 1 minutes during sleep hours, switching to sleeping cat");
+                            debug!("CPU has been idle for 1 minutes during sleep hours, switching to sleeping cat");
                         }
                     } else {
                         idle_counter = 0;
@@ -160,9 +161,9 @@ impl App {
                             is_sleeping = false;
                             icon_index = 0; // Reset animation
                             if usage >= 5.0 {
-                                println!("CPU activity detected, switching back to normal cat");
+                                debug!("CPU activity detected, switching back to normal cat");
                             } else {
-                                println!("Outside sleep hours, switching back to normal cat");
+                                debug!("Outside sleep hours, switching back to normal cat");
                             }
                         }
                     }
@@ -232,7 +233,7 @@ impl App {
                         let git_hash = option_env!("GIT_HASH").unwrap_or("N/A");
                         let project_page = "https://github.com/bearice/RustCat";
                         let message = format!(
-                            "RustCat version {} (Git: {})\\nProject Page: {}",
+                            "RustCat version {} (Git: {})\nProject Page: {}",
                             version, git_hash, project_page
                         );
 
@@ -268,6 +269,6 @@ impl App {
 
     pub fn shutdown(&self) {
         // Platform-specific shutdown logic can be added here
-        println!("Shutting down RustCat...");
+        debug!("Shutting down RustCat...");
     }
 }

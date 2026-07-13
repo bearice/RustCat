@@ -1,5 +1,6 @@
 use crate::icon_manager::{IconManager, Theme};
 use crate::platform::{SettingsManager, SettingsManagerImpl};
+use crate::debug;
 use trayicon::MenuBuilder;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -33,7 +34,7 @@ pub fn build_menu(icon_manager: &IconManager) -> MenuBuilder<Events> {
                     Theme::Auto => "Auto",
                 };
                 let is_current = current_theme == theme;
-                println!("current_theme: {:?}, new_theme: {:?}", current_theme, theme);
+                debug!("current_theme: {:?}, new_theme: {:?}", current_theme, theme);
                 theme_menu = theme_menu.checkable(theme_name, is_current, Events::SetTheme(theme));
             }
             menu = menu.submenu("Theme", theme_menu);
