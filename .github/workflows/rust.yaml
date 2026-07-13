@@ -172,13 +172,23 @@ jobs:
         run: cargo deb --no-strip --output RustCat-linux-${{ matrix.arch }}.deb
 
       - name: Build .rpm
-        run: cargo generate-rpm
+        # Clear stale rpms from a previous cached build first: target/ is
+        # cached across runs, so an older-version rpm would already sit in
+        # target/generate-rpm/. cargo-generate-rpm version-stamps its output
+        # filename (rustcat-<version>-*.rpm), so the old one is not overwritten
+        # and the glob in the next step would match two files, breaking cp.
+        run: |
+          rm -rf target/generate-rpm
+          cargo generate-rpm
 
       - name: Stage .rpm artifact
         shell: bash
         run: |
           mkdir -p rpm-out
-          cp target/generate-rpm/*.rpm rpm-out/RustCat-linux-${{ matrix.arch }}.rpm
+          # Exactly one .rpm should exist after the clean+build above; copy it
+          # to a fixed name. Use find+cp so a missing file fails loudly rather
+          # than expanding to a literal "*.rpm".
+          find target/generate-rpm -name '*.rpm' -exec cp {} rpm-out/RustCat-linux-${{ matrix.arch }}.rpm \;
 
       - name: Build AppImage
         # Best-effort: linuxdeploy's CImg-based icon deploy cannot read .ico,
