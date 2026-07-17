@@ -35,7 +35,7 @@ pub fn build_menu(icon_manager: &IconManager) -> MenuBuilder<Events> {
                 };
                 let is_current = current_theme == theme;
                 debug!("current_theme: {:?}, new_theme: {:?}", current_theme, theme);
-                theme_menu = theme_menu.checkable(theme_name, is_current, Events::SetTheme(theme));
+                theme_menu = theme_menu.radio(theme_name, is_current, Events::SetTheme(theme));
             }
             menu = menu.submenu("Theme", theme_menu);
         }
@@ -55,7 +55,7 @@ pub fn build_menu(icon_manager: &IconManager) -> MenuBuilder<Events> {
                 .to_uppercase()
                 .collect::<String>()
                 + &icon_name[1..];
-            icon_menu = icon_menu.checkable(&display_name, is_current, Events::SetIcon(icon_name));
+            icon_menu = icon_menu.radio(&display_name, is_current, Events::SetIcon(icon_name));
         }
         menu = menu.submenu("Icon", icon_menu);
     }

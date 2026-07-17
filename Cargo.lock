@@ -849,7 +849,7 @@ dependencies = [
 
 [[package]]
 name = "rust_cat"
-version = "2.4.0"
+version = "2.4.2"
 dependencies = [
  "dirs",
  "dispatch",
@@ -1061,9 +1061,8 @@ dependencies = [
 
 [[package]]
 name = "trayicon"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e4323bcdb413ca07ff0a44aa79afe14e8fa0eee7655f1496347ed05a95385e8"
+version = "0.4.3"
+source = "git+https://github.com/bearice/trayicon-rs?rev=b90f63b3119d5166648891bbdd9182912b24536b#b90f63b3119d5166648891bbdd9182912b24536b"
 dependencies = [
  "futures",
  "ico",

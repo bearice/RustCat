@@ -6,6 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.2] - 2026-07-17
+
+### Fixed
+
+- **Icon/theme menu acted like a multi-select on KDE.** Selecting an icon or
+  theme option did not clear the others — the menu behaved like independent
+  checkboxes instead of a single-choice list. Two cooperating fixes:
+
+  - The Icon and Theme submenus now use radio items (one selection per group)
+    instead of independent checkboxes. "Run on Start" remains an independent
+    checkbox. On Linux/KDE the tray library emits the DBusMenu
+    `toggle-type = "radio"` property and enforces one selection per group; on
+    Windows the items render with the native radio-button glyph
+    (`MFT_RADIOCHECK`); on macOS, which has no native radio menu item, they
+    render as checkmarks but stay exclusive because the app rebuilds the menu
+    with only the selected item checked.
+  - Root cause of the stale state: the `trayicon` tray library emitted the
+    DBusMenu `LayoutUpdated` signal with a fixed revision of `0`. KDE caches the
+    last revision and ignores `LayoutUpdated` signals whose revision is not
+    strictly greater, so rebuilt menus — including the corrected toggle states
+    — never reached the UI, and the client's optimistic local toggles
+    accumulated. The library now bumps a monotonically-increasing per-process
+    revision on every layout change, so each update is applied.
+  - The same library also returned a constant revision of `0` from the
+    `GetLayout` D-Bus method, which the spec requires to match the latest
+    `LayoutUpdated` revision. It now returns the live revision, keeping
+    `GetLayout` and `LayoutUpdated` in agreement for revision-aware hosts.
+  - On Windows, radio items were rendered with the radio glyph but selecting
+    one did not check it or clear its group — exclusivity only held because
+    RustCat rebuilt the menu. The library now enforces exclusivity natively via
+    `CheckMenuRadioItem`.
+
+### Changed
+
+- RustCat now builds against the `bearice/trayicon-rs` fork (pinned by git rev
+  in `[patch.crates-io]`) which carries the radio support and the KDE revision
+  fixes above. The fork is published at
+  https://github.com/bearice/trayicon-rs and tracked as trayicon 0.4.3.
+
 ## [2.4.1] - 2026-07-13
 
 ### Fixed

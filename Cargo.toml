@@ -1,6 +1,6 @@
 [package]
 name = "rust_cat"
-version = "2.4.1"
+version = "2.4.2"
 edition = "2021"
 description = "An animated tray cat (or parrot) whose animation speed tracks real-time CPU usage"
 license = "Apache-2.0"
@@ -15,6 +15,15 @@ categories = ["system-monitoring", "gui"]
 [dependencies]
 trayicon = "0.4.1"
 flate2 = "1.1"
+
+# Use the bearice/trayicon-rs fork, which adds `MenuItem::Radio` / `MenuBuilder::radio`
+# for mutually-exclusive icon/theme selection and fixes the KDE `LayoutUpdated`
+# revision-0 bug that caused the icon menu to behave like a multi-select.
+# A git rev is used (not a local path) so the Nix/flake (crane) build, which only
+# copies this crate's tree, can fetch the fork reproducibly. For local hacking
+# swap in: trayicon = { path = "../trayicon-rs" }
+[patch.crates-io]
+trayicon = { git = "https://github.com/bearice/trayicon-rs", rev = "b90f63b3119d5166648891bbdd9182912b24536b" }
 
 
 [target.'cfg(windows)'.dependencies]
