@@ -1061,8 +1061,8 @@ dependencies = [
 
 [[package]]
 name = "trayicon"
-version = "0.4.3"
-source = "git+https://github.com/bearice/trayicon-rs?rev=b90f63b3119d5166648891bbdd9182912b24536b#b90f63b3119d5166648891bbdd9182912b24536b"
+version = "0.5.0"
+source = "git+https://github.com/bearice/trayicon-rs?rev=e0baa0618f3a4b6babf7d8c9637e00bfbe4af15a#e0baa0618f3a4b6babf7d8c9637e00bfbe4af15a"
 dependencies = [
  "futures",
  "ico",
