@@ -6,6 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-09-11
+
+### Added
+
+- **GPU usage monitoring.** The animation speed can now track GPU utilization
+  in addition to CPU. A new **Usage Source** menu item selects **CPU**, **GPU**,
+  or **Both** (the max of the two):
+  - **Windows** — per-engine PDH counters (`\GPU Engine(*)`): utilization is
+    summed per (GPU, engine), capped at 100%, then maxed across engines,
+    matching Task Manager's "GPU busy" figure.
+  - **macOS** — IOKit `PerformanceStatistics -> "Device Utilization %"`.
+  - **Linux** — `nvidia-smi` per-GPU utilization (NVIDIA).
+- **Per-GPU device selection.** On machines with more than one GPU a
+  **GPU Device** submenu appears, letting you pick a specific adapter or
+  **All GPUs**. The selection is session-only (device ids are only stable for
+  the current boot); a stale selection automatically falls back to All GPUs.
+- **Idle adapter enumeration (Windows).** Adapters are enumerated via DXGI
+  (`IDXGIFactory1::EnumAdapters1`) independently of the live PDH instances, so
+  an idle secondary GPU is selectable before any application opens a context;
+  software fallback drivers (e.g. Microsoft Basic Render Driver) are filtered
+  out of the menu.
+- **Stable Windows device ids.** Windows GPU ids are derived from the adapter
+  **LUID**, which is identical in the DXGI description and the PDH instance
+  name, so the menu ids and the sampling ids always agree.
+
+### Changed
+
+- The **GPU Device** submenu is hidden when the usage source is **CPU** — the
+  device selection is irrelevant in that mode.
+- The tray menu is rebuilt whenever it is opened, so a GPU attached or detached
+  (e.g. an eGPU) is reflected immediately rather than waiting for another
+  menu rebuild.
+
+### Technical improvements
+
+- **Windows:** the PDH counter-value item array is now allocated through the
+  global allocator with an explicit `Layout` aligned to
+  `PDH_FMT_COUNTERVALUE_ITEM_W` (a plain `Vec<u8>` only guarantees byte
+  alignment, and casting its pointer to that slice type was undefined
+  behavior).
+- **macOS:** IOKit service handles are now reference-counted and released when
+  superseded by a refresh or when the service detaches, so a long-lived tray
+  process no longer accumulates handles. Device ids derive from the IOKit
+  service handle (stable for a device's lifetime) rather than the enumeration
+  position.
+
 ## [2.4.2] - 2026-07-17
 
 ### Fixed
