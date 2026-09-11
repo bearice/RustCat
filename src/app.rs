@@ -386,7 +386,18 @@ impl App {
                         }
                     }
                     Events::ShowMenu => {
+                        // Rebuild the menu before showing it so a GPU that was
+                        // attached or detached since the last build is
+                        // reflected immediately — the menu is otherwise only
+                        // rebuilt on unrelated setting events, so an eGPU
+                        // plugged into a single-GPU machine would stay absent
+                        // until the user changed another setting. Done
+                        // synchronously here (not via `ui_update`) so the fresh
+                        // menu is installed before `show_menu()`.
+                        let gpu_scope = self.gpu_scope.lock().unwrap().clone();
                         if let Ok(mut tray) = self.tray_icon.lock() {
+                            let _ = tray
+                                .set_menu(&build_menu(&self.icon_manager, gpu_scope.as_deref()));
                             if let Err(e) = tray.show_menu() {
                                 eprintln!("Failed to show menu: {}", e);
                             }
