@@ -44,6 +44,7 @@ dispatch = "0.2.0"
 version = "0.62"
 features = [
     "Win32_Foundation",
+    "Win32_Graphics_Dxgi",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Shell",
     "Win32_System_Threading",
