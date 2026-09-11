@@ -36,6 +36,16 @@ impl SettingsManager for MacosSettingsManager {
         }
     }
 
+    fn get_animation_source() -> crate::app::AnimationSource {
+        get_preference("AnimationSource")
+            .map(|s| crate::app::AnimationSource::from_str(&s))
+            .unwrap_or(crate::app::AnimationSource::Cpu)
+    }
+
+    fn set_animation_source(source: crate::app::AnimationSource) {
+        set_preference("AnimationSource", source.as_str());
+    }
+
     fn is_run_on_start_enabled() -> bool {
         let plist_path = dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))

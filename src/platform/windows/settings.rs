@@ -76,6 +76,35 @@ impl SettingsManager for WindowsSettingsManager {
         }
     }
 
+    fn get_animation_source() -> crate::app::AnimationSource {
+        let key = RegKey::predef(HKEY_CURRENT_USER);
+        if let Ok(sub_key) = key.open_subkey_with_flags("Software\\RustCat", KEY_READ) {
+            if let Ok(source_str) = sub_key.get_value::<String, &str>("AnimationSource") {
+                return crate::app::AnimationSource::from_str(&source_str);
+            }
+        }
+
+        // Default source: CPU (original behavior)
+        crate::app::AnimationSource::Cpu
+    }
+
+    fn set_animation_source(source: crate::app::AnimationSource) {
+        let key = RegKey::predef(HKEY_CURRENT_USER);
+        let sub_key = if let Ok(sub_key) =
+            key.open_subkey_with_flags("Software\\RustCat", KEY_WRITE | KEY_READ)
+        {
+            sub_key
+        } else {
+            key.create_subkey_with_flags("Software\\RustCat", KEY_WRITE | KEY_READ)
+                .expect("create_subkey_with_flags")
+                .0
+        };
+
+        sub_key
+            .set_value("AnimationSource", &source.as_str())
+            .expect("set_value");
+    }
+
     fn is_run_on_start_enabled() -> bool {
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
         if let Ok(run_key) = hkcu.open_subkey_with_flags(

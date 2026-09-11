@@ -1,5 +1,6 @@
+use crate::app::AnimationSource;
 use crate::icon_manager::{IconManager, Theme};
-use crate::platform::{SettingsManager, SettingsManagerImpl};
+use crate::platform::{GpuMonitor, GpuMonitorImpl, SettingsManager, SettingsManagerImpl};
 use crate::debug;
 use trayicon::MenuBuilder;
 
@@ -8,13 +9,16 @@ pub enum Events {
     Exit,
     SetTheme(Theme),
     SetIcon(String),
+    SetAnimationSource(AnimationSource),
+    /// Select which GPU drives the animation; `None` = all GPUs.
+    SetGpuScope(Option<String>),
     RunTaskmgr,
     ToggleRunOnStart,
     ShowAboutDialog,
     ShowMenu,
 }
 
-pub fn build_menu(icon_manager: &IconManager) -> MenuBuilder<Events> {
+pub fn build_menu(icon_manager: &IconManager, gpu_scope: Option<&str>) -> MenuBuilder<Events> {
     let run_on_start_enabled = SettingsManagerImpl::is_run_on_start_enabled();
     let current_icon = SettingsManagerImpl::get_current_icon();
     let current_theme = SettingsManagerImpl::get_current_theme();
@@ -58,6 +62,39 @@ pub fn build_menu(icon_manager: &IconManager) -> MenuBuilder<Events> {
             icon_menu = icon_menu.radio(&display_name, is_current, Events::SetIcon(icon_name));
         }
         menu = menu.submenu("Icon", icon_menu);
+    }
+
+    // Build usage source submenu - what drives the animation speed
+    let current_source = SettingsManagerImpl::get_animation_source();
+    let mut source_menu = MenuBuilder::new();
+    for source in [
+        AnimationSource::Cpu,
+        AnimationSource::Gpu,
+        AnimationSource::Both,
+    ] {
+        source_menu = source_menu.radio(
+            source.label(),
+            current_source == source,
+            Events::SetAnimationSource(source),
+        );
+    }
+    menu = menu.submenu("Usage Source", source_menu);
+
+    // Build GPU device submenu — only shown when the machine has more than
+    // one GPU that exposes utilization AND the animation is driven by the
+    // GPU (source is `Gpu` or `Both`). In `Cpu` mode the device selection is
+    // irrelevant, so it is hidden.
+    let gpus = GpuMonitorImpl::enumerate_gpus();
+    if gpus.len() > 1 && current_source != AnimationSource::Cpu {
+        let mut gpu_menu = MenuBuilder::new();
+        gpu_menu = gpu_menu
+            .radio("All GPUs", gpu_scope.is_none(), Events::SetGpuScope(None));
+        for device in &gpus {
+            let is_current = gpu_scope == Some(device.id.as_str());
+            gpu_menu = gpu_menu
+                .radio(&device.name, is_current, Events::SetGpuScope(Some(device.id.clone())));
+        }
+        menu = menu.submenu("GPU Device", gpu_menu);
     }
 
     menu.separator()
