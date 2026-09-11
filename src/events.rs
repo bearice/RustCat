@@ -81,9 +81,11 @@ pub fn build_menu(icon_manager: &IconManager, gpu_scope: Option<&str>) -> MenuBu
     menu = menu.submenu("Usage Source", source_menu);
 
     // Build GPU device submenu — only shown when the machine has more than
-    // one GPU that exposes utilization.
+    // one GPU that exposes utilization AND the animation is driven by the
+    // GPU (source is `Gpu` or `Both`). In `Cpu` mode the device selection is
+    // irrelevant, so it is hidden.
     let gpus = GpuMonitorImpl::enumerate_gpus();
-    if gpus.len() > 1 {
+    if gpus.len() > 1 && current_source != AnimationSource::Cpu {
         let mut gpu_menu = MenuBuilder::new();
         gpu_menu = gpu_menu
             .radio("All GPUs", gpu_scope.is_none(), Events::SetGpuScope(None));
