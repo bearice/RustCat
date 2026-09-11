@@ -261,6 +261,52 @@ fn read_string_property(service: u32, key: &str) -> Option<String> {
 mod tests {
     use super::*;
 
+    /// TEMP probe: enumerate raw services twice (with a pause) to see
+    /// whether the io_service_t handles are stable across re-enumeration.
+    #[test]
+    fn probe_handle_stability() {
+        fn raw_services() -> Vec<u32> {
+            let mut out = Vec::new();
+            for class in ["IOAccelerator", "AGXAccelerator"] {
+                let Ok(c) = CString::new(class) else { continue };
+                let matching = unsafe { IOServiceMatching(c.as_ptr()) };
+                if matching.is_null() {
+                    continue;
+                }
+                let mut it: u32 = 0;
+                if unsafe { IOServiceGetMatchingServices(0, matching, &mut it) } != 0 || it == 0 {
+                    continue;
+                }
+                let mut s = unsafe { IOIteratorNext(it) };
+                while s != 0 {
+                    out.push(s);
+                    s = unsafe { IOIteratorNext(it) };
+                }
+                unsafe { IOObjectRelease(it) };
+                // release the extra refs we took for the probe (we keep one
+                // reference alive for the process; releasing all would be
+                // fine for a probe too, but keep it simple)
+            }
+            out
+        }
+        let first = raw_services();
+        eprintln!("probe first: {:?}", first);
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let second = raw_services();
+        eprintln!("probe second: {:?}", second);
+        eprintln!(
+            "probe stable: {} (equal sets: {})",
+            first == second,
+            {
+                let mut a = first.clone();
+                let mut b = second.clone();
+                a.sort();
+                b.sort();
+                a == b
+            }
+        );
+    }
+
     /// Smoke test: exercise the sampling path and print the reading so it
     /// can be checked manually on a machine with a GPU. Deliberately
     /// lenient — a machine with no GPU at all is not a failure.
