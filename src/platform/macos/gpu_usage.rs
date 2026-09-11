@@ -1,5 +1,5 @@
 use crate::platform::{GpuDevice, GpuMonitor};
-use objc2_core_foundation::{CFArray, CFDictionary, CFNumber, CFString, CFType, CFRetained};
+use objc2_core_foundation::{CFDictionary, CFNumber, CFString, CFType, CFRetained};
 use std::ffi::{c_void, CString};
 use std::io;
 use std::ptr::NonNull;
@@ -19,11 +19,17 @@ struct GpuEntry {
     name: String,
 }
 
-// Service handles returned by IOKit are cached for the process lifetime
-// (see GPU_ENTRIES) and never released.
+// Service handles kept in GPU_ENTRIES are cached for the process lifetime
+// and never released; services we skip are released as we go.
 extern "C" {
     fn IOServiceMatching(name: *const i8) -> *mut c_void;
-    fn IOServiceGetServices(main_port: MachPort, matching: *mut c_void) -> *mut c_void;
+    fn IOServiceGetMatchingServices(
+        main_port: MachPort,
+        matching: *mut c_void,
+        existing: *mut u32,
+    ) -> u32;
+    fn IOIteratorNext(iterator: u32) -> u32;
+    fn IOObjectRelease(object: u32);
     fn IORegistryEntryCreateCFProperty(
         entry: u32,
         key: *const c_void,
@@ -119,10 +125,9 @@ fn gpu_entries() -> Vec<GpuEntry> {
 /// Enumerate every GPU accelerator service.
 ///
 /// NOTE: the dictionary returned by `IOServiceMatching` must NOT be released
-/// by us — IOKit takes ownership of it during the lookup (observed
-/// 2026-09-11: CFReleasing it afterwards segfaults). The CFArray returned
-/// by `IOServiceGetServices` IS ours to release, so it is wrapped in a
-/// `CFRetained` (create rule).
+/// by us — `IOServiceGetMatchingServices` is declared `CF_RELEASES_ARGUMENT`
+/// and always consumes one reference of the matching dictionary (observed
+/// 2026-09-11: CFReleasing it afterwards segfaults).
 fn lookup_gpu_entries() -> Vec<GpuEntry> {
     for class in ["IOAccelerator", "AGXAccelerator"] {
         let Ok(class_cstr) = CString::new(class) else {
@@ -132,42 +137,43 @@ fn lookup_gpu_entries() -> Vec<GpuEntry> {
         if matching_raw.is_null() {
             continue;
         }
-        let services_raw = unsafe { IOServiceGetServices(K_IO_MAIN_PORT_DEFAULT, matching_raw) };
-        if services_raw.is_null() {
+        let mut iterator: u32 = 0;
+        let ret = unsafe {
+            IOServiceGetMatchingServices(K_IO_MAIN_PORT_DEFAULT, matching_raw, &mut iterator)
+        };
+        if ret != 0 || iterator == 0 {
+            // kIOReturnSuccess == 0; a NULL iterator means "no matches".
             continue;
         }
-        // Take ownership of the returned CFArray (create rule).
-        let arr = unsafe {
-            CFRetained::from_raw(NonNull::new_unchecked(services_raw as *mut CFType))
-        };
-        let arr = match arr.downcast::<CFArray>() {
-            Ok(a) => a,
-            Err(_) => continue,
-        };
-        let arr = unsafe { CFRetained::cast_unchecked::<CFArray<CFNumber>>(arr) };
 
         let mut entries = Vec::new();
-        for (i, number) in arr.iter().enumerate() {
-            let service = match number.as_f64() {
-                Some(v) if (v as u32) != 0 => v as u32,
-                _ => continue,
-            };
+        let mut service = unsafe { IOIteratorNext(iterator) };
+        while service != 0 {
             // Only keep services that actually expose the utilization
-            // statistic (matches the single-service behavior).
-            if read_device_utilization(service).is_none() {
-                continue;
+            // statistic (matches the single-service behavior). Kept
+            // services are cached for the process lifetime and never
+            // released; the rest are released right away.
+            if read_device_utilization(service).is_some() {
+                let name = read_string_property(service, "model")
+                    .or_else(|| read_string_property(service, "name"))
+                    .unwrap_or_else(|| format!("GPU {}", entries.len()));
+                let id = format!("macos-gpu-{}", entries.len());
+                entries.push(GpuEntry {
+                    service,
+                    id,
+                    name,
+                });
+            } else {
+                unsafe { IOObjectRelease(service) };
             }
-            let name = read_string_property(service, "model")
-                .or_else(|| read_string_property(service, "name"))
-                .unwrap_or_else(|| format!("GPU {}", i));
-            let id = format!("macos-gpu-{}", i);
-            entries.push(GpuEntry {
-                service,
-                id,
-                name,
-            });
+            service = unsafe { IOIteratorNext(iterator) };
         }
-        return entries;
+        // Release the iterator; the services we kept are cached.
+        unsafe { IOObjectRelease(iterator) };
+
+        if !entries.is_empty() {
+            return entries;
+        }
     }
     Vec::new()
 }
