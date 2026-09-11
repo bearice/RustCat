@@ -14,6 +14,10 @@ pub trait CpuMonitor {
 }
 
 /// A GPU device discovered by the platform monitor.
+///
+/// The device id is stable for the current boot; the selection itself
+/// (`App::gpu_scope`) is session-only, so a persisted id can never point
+/// at a different adapter on a later boot.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GpuDevice {
     /// Platform-specific device id, stable for the current boot.
@@ -47,9 +51,6 @@ pub trait SettingsManager {
     fn set_current_theme(theme: Option<crate::icon_manager::Theme>);
     fn get_animation_source() -> crate::app::AnimationSource;
     fn set_animation_source(source: crate::app::AnimationSource);
-    /// Selected GPU device id; `None` = all GPUs (the default).
-    fn get_gpu_scope() -> Option<String>;
-    fn set_gpu_scope(scope: Option<String>);
     fn is_run_on_start_enabled() -> bool;
     fn set_run_on_start(enable: bool);
     fn is_dark_mode_enabled() -> bool;

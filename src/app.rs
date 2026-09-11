@@ -145,7 +145,10 @@ impl App {
 
         let theme = initial_theme.unwrap_or_else(SettingsManagerImpl::get_current_theme);
         let animation_source = SettingsManagerImpl::get_animation_source();
-        let gpu_scope = SettingsManagerImpl::get_gpu_scope();
+        // The GPU device selection is session-only: device ids are only
+        // stable for the current boot, so a persisted selection could
+        // point at a different adapter on a later boot.
+        let gpu_scope: Option<String> = None;
         let initial_icons = icon_manager
             .get_icon_set(initial_icon, Some(theme))
             .ok_or("Invalid initial icon name")?;
@@ -156,7 +159,7 @@ impl App {
             })
             .icon(initial_icons[0].clone())
             .tooltip("~Nyan~ RustCat - CPU/GPU Usage Monitor")
-            .menu(build_menu(&icon_manager))
+            .menu(build_menu(&icon_manager, None))
             .on_right_click(Events::ShowMenu)
             .on_double_click(Events::RunTaskmgr)
             .build()?;
@@ -237,7 +240,10 @@ impl App {
                     let source = *animation_source.lock().unwrap();
                     let scope = gpu_scope.lock().unwrap().clone();
                     let (cpu_usage, gpu_usage) = sample_usage(source, scope.as_deref());
-                    if gpu_usage.is_none() {
+                    // Only run the stale-device recovery when a GPU sample
+                    // was actually requested (with source = CPU the GPU is
+                    // deliberately not sampled, so `None` is not a failure).
+                    if gpu_usage.is_none() && source != AnimationSource::Cpu {
                         if let Some(scope) = &scope {
                             // The scoped device may have disappeared (e.g. an
                             // eGPU unplugged); fall back to all GPUs. Only
@@ -355,7 +361,7 @@ impl App {
                         self.update_menu();
                     }
                     Events::SetGpuScope(scope) => {
-                        SettingsManagerImpl::set_gpu_scope(scope.clone());
+                        // Session-only selection (see App::new).
                         *self.gpu_scope.lock().unwrap() = scope;
                         self.update_menu();
                     }
@@ -394,9 +400,10 @@ impl App {
     fn update_menu(&self) {
         let tray_icon = self.tray_icon.clone();
         let icon_manager = self.icon_manager.clone();
+        let gpu_scope = self.gpu_scope.lock().unwrap().clone();
         ui_update(move || {
             if let Ok(mut tray) = tray_icon.lock() {
-                if let Err(e) = tray.set_menu(&build_menu(&icon_manager)) {
+                if let Err(e) = tray.set_menu(&build_menu(&icon_manager, gpu_scope.as_deref())) {
                     eprintln!("Failed to update menu: {}", e);
                 }
             }

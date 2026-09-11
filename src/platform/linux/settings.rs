@@ -44,17 +44,6 @@ impl SettingsManager for LinuxSettingsManager {
         write_setting("AnimationSource", source.as_str());
     }
 
-    fn get_gpu_scope() -> Option<String> {
-        read_setting("GpuScope").filter(|s| !s.is_empty())
-    }
-
-    fn set_gpu_scope(scope: Option<String>) {
-        match scope {
-            Some(scope) => write_setting("GpuScope", &scope),
-            None => remove_setting("GpuScope"),
-        }
-    }
-
     fn is_run_on_start_enabled() -> bool {
         autostart_desktop_path().exists()
     }

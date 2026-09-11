@@ -38,10 +38,20 @@ extern "C" {
     ) -> *const c_void;
 }
 
-/// Cached list of GPU services. IOAccelerator/AGXAccelerator services are
-/// looked up once and reused; a failed property read invalidates the cache
-/// so a hot-plugged GPU is picked up on the next sample.
-static GPU_ENTRIES: Mutex<Option<Vec<GpuEntry>>> = Mutex::new(None);
+/// Cached list of GPU services. IOAccelerator/AGXAccelerator services can
+/// be hot-plugged (e.g. an eGPU attached after startup), so the list is
+/// re-enumerated every `GPU_REFRESH_INTERVAL` samples and an empty result
+/// is never cached (a later-attached GPU must be discoverable on the next
+/// sample). A failed property read also invalidates the cache.
+static GPU_CACHE: Mutex<Option<GpuCache>> = Mutex::new(None);
+
+struct GpuCache {
+    entries: Vec<GpuEntry>,
+    samples_since_refresh: u32,
+}
+
+/// ~30 s at the app's 1 sample/s cadence.
+const GPU_REFRESH_INTERVAL: u32 = 30;
 
 pub struct MacosGpuMonitor;
 
@@ -74,7 +84,7 @@ impl GpuMonitor for MacosGpuMonitor {
 
         // All reads failed — the cached services may be stale (e.g. after a
         // GPU hot-plug). Invalidate the cache and retry once.
-        *GPU_ENTRIES.lock().unwrap() = None;
+        *GPU_CACHE.lock().unwrap() = None;
         entries = gpu_entries();
         if entries.is_empty() {
             return Err(io::Error::other(
@@ -113,13 +123,31 @@ fn read_max(entries: &[GpuEntry], scope: Option<&str>) -> Option<f64> {
     max
 }
 
-/// Return the cached GPU service list, looking it up on first use.
+/// Return the cached GPU service list, re-enumerating when due (first
+/// use, every `GPU_REFRESH_INTERVAL` samples, or after an invalidation).
 fn gpu_entries() -> Vec<GpuEntry> {
-    let mut guard = GPU_ENTRIES.lock().unwrap();
-    if guard.is_none() {
-        *guard = Some(lookup_gpu_entries());
+    let mut guard = GPU_CACHE.lock().unwrap();
+    let due = match guard.as_mut() {
+        None => true,
+        Some(cache) => {
+            cache.samples_since_refresh += 1;
+            cache.samples_since_refresh >= GPU_REFRESH_INTERVAL
+        }
+    };
+    if due {
+        let found = lookup_gpu_entries();
+        if found.is_empty() {
+            // Nothing found yet (or all detached) — do not cache the empty
+            // result; retry on the next call.
+            *guard = None;
+        } else {
+            *guard = Some(GpuCache {
+                entries: found,
+                samples_since_refresh: 0,
+            });
+        }
     }
-    guard.clone().unwrap_or_default()
+    guard.as_ref().map(|c| c.entries.clone()).unwrap_or_default()
 }
 
 /// Enumerate every GPU accelerator service.

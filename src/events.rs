@@ -18,7 +18,7 @@ pub enum Events {
     ShowMenu,
 }
 
-pub fn build_menu(icon_manager: &IconManager) -> MenuBuilder<Events> {
+pub fn build_menu(icon_manager: &IconManager, gpu_scope: Option<&str>) -> MenuBuilder<Events> {
     let run_on_start_enabled = SettingsManagerImpl::is_run_on_start_enabled();
     let current_icon = SettingsManagerImpl::get_current_icon();
     let current_theme = SettingsManagerImpl::get_current_theme();
@@ -82,14 +82,13 @@ pub fn build_menu(icon_manager: &IconManager) -> MenuBuilder<Events> {
 
     // Build GPU device submenu — only shown when the machine has more than
     // one GPU that exposes utilization.
-    let current_scope = SettingsManagerImpl::get_gpu_scope();
     let gpus = GpuMonitorImpl::enumerate_gpus();
     if gpus.len() > 1 {
         let mut gpu_menu = MenuBuilder::new();
         gpu_menu = gpu_menu
-            .radio("All GPUs", current_scope.is_none(), Events::SetGpuScope(None));
+            .radio("All GPUs", gpu_scope.is_none(), Events::SetGpuScope(None));
         for device in &gpus {
-            let is_current = current_scope.as_deref() == Some(device.id.as_str());
+            let is_current = gpu_scope == Some(device.id.as_str());
             gpu_menu = gpu_menu
                 .radio(&device.name, is_current, Events::SetGpuScope(Some(device.id.clone())));
         }
