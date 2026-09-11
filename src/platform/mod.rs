@@ -13,12 +13,23 @@ pub trait CpuMonitor {
     fn get_cpu_usage() -> io::Result<f64>;
 }
 
+/// Cross-platform GPU usage monitoring trait
+pub trait GpuMonitor {
+    /// Returns GPU usage percentage as a float (0.0 to 100.0).
+    ///
+    /// Returns `Err` when no GPU usage source is available (no GPU, no
+    /// driver, no `nvidia-smi`, ...).
+    fn get_gpu_usage() -> io::Result<f64>;
+}
+
 /// Cross-platform settings management trait
 pub trait SettingsManager {
     fn get_current_icon() -> String;
     fn set_current_icon(icon_name: &str);
     fn get_current_theme() -> crate::icon_manager::Theme;
     fn set_current_theme(theme: Option<crate::icon_manager::Theme>);
+    fn get_animation_source() -> crate::app::AnimationSource;
+    fn set_animation_source(source: crate::app::AnimationSource);
     fn is_run_on_start_enabled() -> bool;
     fn set_run_on_start(enable: bool);
     fn is_dark_mode_enabled() -> bool;
@@ -39,6 +50,13 @@ pub type CpuMonitorImpl = windows::WindowsCpuMonitor;
 pub type CpuMonitorImpl = macos::MacosCpuMonitor;
 #[cfg(target_os = "linux")]
 pub type CpuMonitorImpl = linux::LinuxCpuMonitor;
+
+#[cfg(windows)]
+pub type GpuMonitorImpl = windows::WindowsGpuMonitor;
+#[cfg(target_os = "macos")]
+pub type GpuMonitorImpl = macos::MacosGpuMonitor;
+#[cfg(target_os = "linux")]
+pub type GpuMonitorImpl = linux::LinuxGpuMonitor;
 
 #[cfg(windows)]
 pub type SettingsManagerImpl = windows::WindowsSettingsManager;

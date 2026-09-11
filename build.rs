@@ -1,7 +1,8 @@
 use flate2::{write::GzEncoder, Compression};
 use std::{collections::HashMap, io, path::Path};
 
-// only include winres if compiling for Windows
+// winres is a target.'cfg(windows)'.build-dependency, which cargo resolves
+// against the *build host* — so it is only importable from a Windows host.
 #[cfg(target_os = "windows")]
 use winres::WindowsResource;
 
@@ -30,12 +31,24 @@ fn main() -> io::Result<()> {
         println!("cargo:rustc-cfg=release");
     }
 
+    // The build script runs on the *host*, but winres can only embed
+    // resources when the *target* is Windows (it errors out otherwise).
+    // The import above is host-gated to match how cargo resolves the
+    // target.'cfg(windows)' build-dependency; the runtime check below
+    // gates the actual work on the target.
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+
     // Generate Windows resource file if compiling for Windows
     #[cfg(target_os = "windows")]
-    {
+    if target_os == "windows" {
         let mut res = WindowsResource::new();
         res.set_icon("assets/appIcon.ico");
         res.compile()?;
+    }
+
+    // Link the IOKit framework for GPU usage monitoring (PerformanceStatistics)
+    if target_os == "macos" {
+        println!("cargo:rustc-link-lib=framework=IOKit");
     }
 
     generate_icon_resources()?;

@@ -6,11 +6,95 @@ use std::time::Duration;
 
 use crate::events::{build_menu, Events};
 use crate::icon_manager::{IconManager, Theme};
-use crate::platform::{CpuMonitor, SettingsManager, SystemIntegration};
-use crate::platform::{CpuMonitorImpl, SettingsManagerImpl, SystemIntegrationImpl};
+use crate::platform::{CpuMonitor, GpuMonitor, SettingsManager, SystemIntegration};
+use crate::platform::{
+    CpuMonitorImpl, GpuMonitorImpl, SettingsManagerImpl, SystemIntegrationImpl,
+};
 use crate::debug;
 
 use trayicon::*;
+
+/// The usage source that drives the animation speed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnimationSource {
+    Cpu,
+    Gpu,
+    Both,
+}
+
+impl AnimationSource {
+    /// Parse from the persisted string form; unknown values default to CPU.
+    pub fn from_str(s: &str) -> Self {
+        match s.to_ascii_lowercase().as_str() {
+            "gpu" => AnimationSource::Gpu,
+            "both" => AnimationSource::Both,
+            _ => AnimationSource::Cpu,
+        }
+    }
+
+    /// Persisted string form (registry value / defaults key / settings.conf).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AnimationSource::Cpu => "cpu",
+            AnimationSource::Gpu => "gpu",
+            AnimationSource::Both => "both",
+        }
+    }
+
+    /// Human-readable label for menus and logs.
+    pub fn label(self) -> &'static str {
+        match self {
+            AnimationSource::Cpu => "CPU",
+            AnimationSource::Gpu => "GPU",
+            AnimationSource::Both => "CPU + GPU",
+        }
+    }
+}
+
+/// Sample CPU and/or GPU usage depending on the selected source.
+///
+/// A `None` component means it was not sampled (the source does not need it)
+/// or the read failed.
+fn sample_usage(source: AnimationSource) -> (Option<f64>, Option<f64>) {
+    let cpu = match source {
+        AnimationSource::Gpu => None,
+        _ => CpuMonitorImpl::get_cpu_usage()
+            .map_err(|e| eprintln!("Failed to get CPU usage: {}", e))
+            .ok(),
+    };
+    let gpu = match source {
+        AnimationSource::Cpu => None,
+        _ => GpuMonitorImpl::get_gpu_usage()
+            .map_err(|e| eprintln!("Failed to get GPU usage: {}", e))
+            .ok(),
+    };
+    (cpu, gpu)
+}
+
+/// The usage value that drives the animation: CPU, GPU, or the max of both.
+/// `None` means no usable data was available this sample.
+fn effective_usage(
+    source: AnimationSource,
+    cpu: Option<f64>,
+    gpu: Option<f64>,
+) -> Option<f64> {
+    match source {
+        AnimationSource::Cpu => cpu,
+        AnimationSource::Gpu => gpu,
+        AnimationSource::Both => match (cpu, gpu) {
+            (Some(c), Some(g)) => Some(c.max(g)),
+            (c, g) => c.or(g),
+        },
+    }
+}
+
+/// Format a usage value for tooltips; `None` renders as "n/a".
+fn fmt_pct(usage: Option<f64>) -> String {
+    match usage {
+        Some(v) => format!("{:.2}%", v),
+        None => "n/a".to_string(),
+    }
+}
 
 fn is_sleep_time() -> bool {
     let hour = SystemIntegrationImpl::get_local_hour();
@@ -40,6 +124,7 @@ pub struct App {
     event_receiver: Option<mpsc::Receiver<Events>>,
     icon_name: Arc<Mutex<String>>,
     theme: Arc<Mutex<Theme>>,
+    animation_source: Arc<Mutex<AnimationSource>>,
 }
 
 impl App {
@@ -53,6 +138,7 @@ impl App {
         let exit_flag = Arc::new(AtomicBool::new(false));
 
         let theme = initial_theme.unwrap_or_else(SettingsManagerImpl::get_current_theme);
+        let animation_source = SettingsManagerImpl::get_animation_source();
         let initial_icons = icon_manager
             .get_icon_set(initial_icon, Some(theme))
             .ok_or("Invalid initial icon name")?;
@@ -62,7 +148,7 @@ impl App {
                 let _ = sender.send(e.clone());
             })
             .icon(initial_icons[0].clone())
-            .tooltip("~Nyan~ RustCat - CPU Usage Monitor")
+            .tooltip("~Nyan~ RustCat - CPU/GPU Usage Monitor")
             .menu(build_menu(&icon_manager))
             .on_right_click(Events::ShowMenu)
             .on_double_click(Events::RunTaskmgr)
@@ -75,6 +161,7 @@ impl App {
             event_receiver: Some(receiver),
             icon_name: Arc::new(Mutex::new(initial_icon.to_string())),
             theme: Arc::new(Mutex::new(theme)),
+            animation_source: Arc::new(Mutex::new(animation_source)),
         })
     }
 
@@ -84,6 +171,7 @@ impl App {
         let icon_manager = self.icon_manager.clone();
         let icon_name = self.icon_name.clone();
         let theme = self.theme.clone();
+        let animation_source = self.animation_source.clone();
 
         thread::spawn(move || {
             let sleep_interval = 10;
@@ -137,35 +225,40 @@ impl App {
 
                 if update_counter >= 1000 {
                     update_counter = 0;
-                    let usage = match CpuMonitorImpl::get_cpu_usage() {
-                        Ok(usage) => usage,
-                        Err(e) => {
-                            eprintln!("Failed to get CPU usage: {}", e);
-                            continue;
-                        }
-                    };
-                    speed = (200.0 / (usage / 5.0).clamp(1.0_f64, 20.0_f64)).round() as u64;
-                    debug!("CPU Usage: {:.2}% speed: {}", usage, speed);
+                    let source = *animation_source.lock().unwrap();
+                    let (cpu_usage, gpu_usage) = sample_usage(source);
+                    let usage = effective_usage(source, cpu_usage, gpu_usage);
 
-                    // Check if CPU is idle (less than 5% usage) and it's sleep time (22:00-6:00)
-                    if usage < 5.0 && is_sleep_time() {
-                        idle_counter += 1000; // Add the update interval
-                        if idle_counter >= idle_threshold && !is_sleeping {
-                            is_sleeping = true;
-                            icon_index = 0; // Reset animation to start from first sleeping frame
-                            debug!("CPU has been idle for 1 minutes during sleep hours, switching to sleeping cat");
-                        }
-                    } else {
-                        idle_counter = 0;
-                        if is_sleeping {
-                            is_sleeping = false;
-                            icon_index = 0; // Reset animation
-                            if usage >= 5.0 {
-                                debug!("CPU activity detected, switching back to normal cat");
-                            } else {
-                                debug!("Outside sleep hours, switching back to normal cat");
+                    if let Some(usage) = usage {
+                        speed = (200.0 / (usage / 5.0).clamp(1.0_f64, 20.0_f64)).round() as u64;
+                        debug!("{} Usage: {:.2}% speed: {}", source.label(), usage, speed);
+
+                        // Check if the machine is idle (less than 5% usage) and
+                        // it's sleep time (22:00-6:00)
+                        if usage < 5.0 && is_sleep_time() {
+                            idle_counter += 1000; // Add the update interval
+                            if idle_counter >= idle_threshold && !is_sleeping {
+                                is_sleeping = true;
+                                icon_index = 0; // Reset animation to start from first sleeping frame
+                                debug!("Usage has been idle for 1 minute during sleep hours, switching to sleeping cat");
+                            }
+                        } else {
+                            idle_counter = 0;
+                            if is_sleeping {
+                                is_sleeping = false;
+                                icon_index = 0; // Reset animation
+                                if usage >= 5.0 {
+                                    debug!("Activity detected, switching back to normal cat");
+                                } else {
+                                    debug!("Outside sleep hours, switching back to normal cat");
+                                }
                             }
                         }
+                    } else {
+                        debug!(
+                            "No {} usage data available, keeping previous speed",
+                            source.label()
+                        );
                     }
 
                     {
@@ -173,7 +266,19 @@ impl App {
                         let tooltip = if is_sleeping && current_icon_name == "cat" {
                             "Shhhh, Your CPU is sleeping...💤".to_string()
                         } else {
-                            format!("CPU Usage: {:.2}%", usage)
+                            match source {
+                                AnimationSource::Cpu => {
+                                    format!("CPU Usage: {}", fmt_pct(cpu_usage))
+                                }
+                                AnimationSource::Gpu => {
+                                    format!("GPU Usage: {}", fmt_pct(gpu_usage))
+                                }
+                                AnimationSource::Both => format!(
+                                    "CPU: {} | GPU: {}",
+                                    fmt_pct(cpu_usage),
+                                    fmt_pct(gpu_usage)
+                                ),
+                            }
                         };
                         ui_update(move || {
                             if let Ok(mut tray) = tray_icon_clone.lock() {
@@ -221,6 +326,11 @@ impl App {
                     Events::SetIcon(icon_name) => {
                         SettingsManagerImpl::set_current_icon(&icon_name);
                         *self.icon_name.lock().unwrap() = icon_name;
+                        self.update_menu();
+                    }
+                    Events::SetAnimationSource(source) => {
+                        SettingsManagerImpl::set_animation_source(source);
+                        *self.animation_source.lock().unwrap() = source;
                         self.update_menu();
                     }
                     Events::ToggleRunOnStart => {

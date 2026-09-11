@@ -1,3 +1,4 @@
+use crate::app::AnimationSource;
 use crate::icon_manager::{IconManager, Theme};
 use crate::platform::{SettingsManager, SettingsManagerImpl};
 use crate::debug;
@@ -8,6 +9,7 @@ pub enum Events {
     Exit,
     SetTheme(Theme),
     SetIcon(String),
+    SetAnimationSource(AnimationSource),
     RunTaskmgr,
     ToggleRunOnStart,
     ShowAboutDialog,
@@ -59,6 +61,22 @@ pub fn build_menu(icon_manager: &IconManager) -> MenuBuilder<Events> {
         }
         menu = menu.submenu("Icon", icon_menu);
     }
+
+    // Build usage source submenu - what drives the animation speed
+    let current_source = SettingsManagerImpl::get_animation_source();
+    let mut source_menu = MenuBuilder::new();
+    for source in [
+        AnimationSource::Cpu,
+        AnimationSource::Gpu,
+        AnimationSource::Both,
+    ] {
+        source_menu = source_menu.radio(
+            source.label(),
+            current_source == source,
+            Events::SetAnimationSource(source),
+        );
+    }
+    menu = menu.submenu("Usage Source", source_menu);
 
     menu.separator()
         .checkable(
