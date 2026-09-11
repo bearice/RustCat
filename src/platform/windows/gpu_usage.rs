@@ -37,13 +37,16 @@ const GPU_UTIL_COUNTER: PCWSTR =
 /// One (process, engine) instance sample.
 #[derive(Clone)]
 struct EngineInstance {
-    /// GPU identity from the instance name (`luid_...` token); "default"
-    /// when the name carries no luid.
+    /// Physical GPU id from the instance name (`phys_<n>`), e.g.
+    /// "win-gpu-0"; "default" when the name carries no phys field. Note:
+    /// the `luid_...` token is a per-GPU-context id (a single physical
+    /// GPU can have many luids), so it must NOT be used for the device
+    /// identity.
     gpu_id: String,
     /// Menu label for the GPU (`GPU 0`, `GPU 1`, ...).
     gpu_label: String,
-    /// Physical engine identity: `luid/phys/eng` (or the full instance
-    /// name when the fields are missing).
+    /// Physical engine identity: `win-gpu-<phys>/<eng>` (or the full
+    /// instance name when the fields are missing).
     engine_key: String,
     value: f64,
 }
@@ -51,44 +54,38 @@ struct EngineInstance {
 /// Parse an instance name like
 /// `pid_10584_luid_0x00000000_0x00017FEA_phys_0_eng_0_engtype_3D`.
 ///
-/// Returns `(gpu_id, gpu_label, engine_key)`. Missing fields degrade
+/// Returns `(gpu_id, gpu_label, engine_key)`. The physical GPU is
+/// identified by the `phys` field (the `luid` field varies per GPU
+/// context even on a single physical GPU). Missing fields degrade
 /// gracefully so unusual names still produce a usable (unique) key.
 fn parse_instance_name(name: &str) -> (String, String, String) {
     let parts: Vec<&str> = name.split('_').collect();
-    let mut luid: Option<String> = None;
-    let mut phys: Option<String> = None;
-    let mut eng: Option<String> = None;
+    let mut phys: Option<&str> = None;
+    let mut eng: Option<&str> = None;
     let mut i = 0;
     while i < parts.len() {
         match parts[i] {
-            "luid" if i + 2 < parts.len() => {
-                luid = Some(format!("{}_{}", parts[i + 1], parts[i + 2]));
-                i += 2;
-            }
             "phys" if i + 1 < parts.len() => {
-                phys = Some(parts[i + 1].to_string());
+                phys = Some(parts[i + 1]);
                 i += 1;
             }
             "eng" if i + 1 < parts.len() => {
-                eng = Some(parts[i + 1].to_string());
+                eng = Some(parts[i + 1]);
                 i += 1;
             }
-            "pid" | "engtype" => {}
             _ => {}
         }
         i += 1;
     }
 
-    let gpu_id = luid.clone().unwrap_or_else(|| "default".to_string());
-    let gpu_label = phys
-        .as_ref()
-        .map(|p| format!("GPU {p}"))
-        .unwrap_or_else(|| "GPU".to_string());
-    let engine_key = match (&luid, &phys, &eng) {
-        (Some(l), Some(p), Some(e)) => format!("{l}/{p}/{e}"),
-        _ => name.to_string(),
-    };
-    (gpu_id, gpu_label, engine_key)
+    match (phys, eng) {
+        (Some(p), Some(e)) => (
+            format!("win-gpu-{p}"),
+            format!("GPU {p}"),
+            format!("win-gpu-{p}/{e}"),
+        ),
+        _ => ("default".to_string(), "GPU".to_string(), name.to_string()),
+    }
 }
 
 /// Read a NUL-terminated UTF-16 string from a PDH item name pointer.
@@ -215,7 +212,7 @@ fn collect_instances() -> io::Result<Vec<EngineInstance>> {
             return Ok(vec![EngineInstance {
                 gpu_id: "default".to_string(),
                 gpu_label: "GPU".to_string(),
-                engine_key: "default/default/0".to_string(),
+                engine_key: "default".to_string(),
                 value: unsafe { value.Anonymous.doubleValue },
             }]);
         }
@@ -291,19 +288,19 @@ mod tests {
     fn parse_name_full() {
         let (gpu_id, gpu_label, engine_key) =
             parse_instance_name("pid_10584_luid_0x00000000_0x00017FEA_phys_0_eng_0_engtype_3D");
-        assert_eq!(gpu_id, "0x00000000_0x00017FEA");
+        assert_eq!(gpu_id, "win-gpu-0");
         assert_eq!(gpu_label, "GPU 0");
-        assert_eq!(engine_key, "0x00000000_0x00017FEA/0/0");
+        assert_eq!(engine_key, "win-gpu-0/0");
     }
 
     #[test]
-    fn parse_name_engtype_with_spaces() {
-        let (gpu_id, _label, engine_key) =
-            parse_instance_name("pid_1_luid_0x1_0x2_phys_0_eng_10_engtype_Video Codec 0");
-        assert_eq!(gpu_id, "0x1_0x2");
-        // engtype is free text after the "engtype_" marker; the key is
-        // luid/phys/eng and must not include it.
-        assert_eq!(engine_key, "0x1_0x2/0/10");
+    fn parse_name_multiple_gpus_and_engtypes() {
+        // Second physical GPU, high engine index, engtype with spaces.
+        let (gpu_id, gpu_label, engine_key) =
+            parse_instance_name("pid_1_luid_0x1_0x2_phys_1_eng_10_engtype_Video Codec 0");
+        assert_eq!(gpu_id, "win-gpu-1");
+        assert_eq!(gpu_label, "GPU 1");
+        assert_eq!(engine_key, "win-gpu-1/10");
     }
 
     #[test]
@@ -311,6 +308,18 @@ mod tests {
         let (gpu_id, _label, engine_key) = parse_instance_name("3D 0");
         assert_eq!(gpu_id, "default");
         assert_eq!(engine_key, "3D 0");
+    }
+
+    /// Smoke test: exercise the sampling path and print the reading so it
+    /// can be checked manually on a machine with a GPU. Deliberately
+    /// lenient — a machine with no GPU at all is not a failure.
+    #[test]
+    fn gpu_usage_smoke() {
+        eprintln!("Windows GPUs: {:?}", WindowsGpuMonitor::enumerate_gpus());
+        match WindowsGpuMonitor::get_gpu_usage(None) {
+            Ok(v) => eprintln!("Windows GPU usage: {:.2}%", v),
+            Err(e) => eprintln!("Windows GPU usage unavailable: {}", e),
+        }
     }
 
     #[test]
