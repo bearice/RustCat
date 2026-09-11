@@ -105,6 +105,42 @@ impl SettingsManager for WindowsSettingsManager {
             .expect("set_value");
     }
 
+    fn get_gpu_scope() -> Option<String> {
+        let key = RegKey::predef(HKEY_CURRENT_USER);
+        if let Ok(sub_key) = key.open_subkey_with_flags("Software\\RustCat", KEY_READ) {
+            if let Ok(scope) = sub_key.get_value::<String, &str>("GpuScope") {
+                if !scope.is_empty() {
+                    return Some(scope);
+                }
+            }
+        }
+        None
+    }
+
+    fn set_gpu_scope(scope: Option<String>) {
+        let key = RegKey::predef(HKEY_CURRENT_USER);
+        let sub_key = if let Ok(sub_key) =
+            key.open_subkey_with_flags("Software\\RustCat", KEY_WRITE | KEY_READ)
+        {
+            sub_key
+        } else {
+            key.create_subkey_with_flags("Software\\RustCat", KEY_WRITE | KEY_READ)
+                .expect("create_subkey_with_flags")
+                .0
+        };
+
+        match scope {
+            Some(scope) => {
+                sub_key
+                    .set_value("GpuScope", &scope)
+                    .expect("set_value");
+            }
+            None => {
+                let _ = sub_key.delete_value("GpuScope");
+            }
+        }
+    }
+
     fn is_run_on_start_enabled() -> bool {
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
         if let Ok(run_key) = hkcu.open_subkey_with_flags(

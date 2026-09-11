@@ -1,6 +1,6 @@
 use crate::app::AnimationSource;
 use crate::icon_manager::{IconManager, Theme};
-use crate::platform::{SettingsManager, SettingsManagerImpl};
+use crate::platform::{GpuMonitor, GpuMonitorImpl, SettingsManager, SettingsManagerImpl};
 use crate::debug;
 use trayicon::MenuBuilder;
 
@@ -10,6 +10,8 @@ pub enum Events {
     SetTheme(Theme),
     SetIcon(String),
     SetAnimationSource(AnimationSource),
+    /// Select which GPU drives the animation; `None` = all GPUs.
+    SetGpuScope(Option<String>),
     RunTaskmgr,
     ToggleRunOnStart,
     ShowAboutDialog,
@@ -77,6 +79,22 @@ pub fn build_menu(icon_manager: &IconManager) -> MenuBuilder<Events> {
         );
     }
     menu = menu.submenu("Usage Source", source_menu);
+
+    // Build GPU device submenu — only shown when the machine has more than
+    // one GPU that exposes utilization.
+    let current_scope = SettingsManagerImpl::get_gpu_scope();
+    let gpus = GpuMonitorImpl::enumerate_gpus();
+    if gpus.len() > 1 {
+        let mut gpu_menu = MenuBuilder::new();
+        gpu_menu = gpu_menu
+            .radio("All GPUs", current_scope.is_none(), Events::SetGpuScope(None));
+        for device in &gpus {
+            let is_current = current_scope.as_deref() == Some(device.id.as_str());
+            gpu_menu = gpu_menu
+                .radio(&device.name, is_current, Events::SetGpuScope(Some(device.id.clone())));
+        }
+        menu = menu.submenu("GPU Device", gpu_menu);
+    }
 
     menu.separator()
         .checkable(

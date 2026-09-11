@@ -1,11 +1,12 @@
-use crate::platform::GpuMonitor;
+use crate::platform::{GpuDevice, GpuMonitor};
+use std::collections::BTreeMap;
 use std::io;
 use std::sync::Mutex;
-use windows::core::PCWSTR;
+use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::System::Performance::{
-    PDH_FMT_COUNTERVALUE, PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_DOUBLE, PDH_HCOUNTER, PDH_HQUERY,
-    PDH_MORE_DATA, PdhAddEnglishCounterW, PdhCollectQueryData, PdhCloseQuery,
-    PdhGetFormattedCounterArrayW, PdhGetFormattedCounterValue, PdhOpenQueryW,
+    PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_DOUBLE, PDH_HCOUNTER, PDH_HQUERY, PDH_MORE_DATA,
+    PdhAddEnglishCounterW, PdhCollectQueryData, PdhCloseQuery, PdhGetFormattedCounterArrayW,
+    PdhGetFormattedCounterValue, PdhOpenQueryW,
 };
 
 pub struct WindowsGpuMonitor;
@@ -25,122 +26,327 @@ static GPU_STATE: Mutex<Option<GpuPdhState>> = Mutex::new(None);
 
 /// Per-engine utilization counter, available since Windows 10 1803 for all
 /// GPU vendors (NVIDIA, AMD, Intel). The `(*)` wildcard expands to one
-/// instance per GPU engine (3D, Copy, Video Decode, ...); we report the max
-/// across engines as the overall GPU utilization, mirroring how Task
-/// Manager surfaces "GPU busy".
+/// instance per (process, engine) pair — instance names look like
+/// `pid_10584_luid_0x00000000_0x00017FEA_phys_0_eng_0_engtype_3D` — so the
+/// utilization of a physical engine is the SUM of its instances (one per
+/// process context), and the overall GPU figure is the max across engines
+/// (the busiest engine), mirroring how Task Manager surfaces "GPU busy".
 const GPU_UTIL_COUNTER: PCWSTR =
     windows::core::w!("\\GPU Engine(*)\\Utilization Percentage");
 
-impl GpuMonitor for WindowsGpuMonitor {
-    fn get_gpu_usage() -> io::Result<f64> {
-        let mut state = GPU_STATE.lock().unwrap();
-        if state.is_none() {
-            let mut hquery = PDH_HQUERY::default();
-            let ret = unsafe { PdhOpenQueryW(None::<&PCWSTR>, 0, &mut hquery) };
-            if ret != 0 {
-                return Err(io::Error::other(format!(
-                    "PdhOpenQueryW failed: 0x{:08X}",
-                    ret
-                )));
+/// One (process, engine) instance sample.
+#[derive(Clone)]
+struct EngineInstance {
+    /// GPU identity from the instance name (`luid_...` token); "default"
+    /// when the name carries no luid.
+    gpu_id: String,
+    /// Menu label for the GPU (`GPU 0`, `GPU 1`, ...).
+    gpu_label: String,
+    /// Physical engine identity: `luid/phys/eng` (or the full instance
+    /// name when the fields are missing).
+    engine_key: String,
+    value: f64,
+}
+
+/// Parse an instance name like
+/// `pid_10584_luid_0x00000000_0x00017FEA_phys_0_eng_0_engtype_3D`.
+///
+/// Returns `(gpu_id, gpu_label, engine_key)`. Missing fields degrade
+/// gracefully so unusual names still produce a usable (unique) key.
+fn parse_instance_name(name: &str) -> (String, String, String) {
+    let parts: Vec<&str> = name.split('_').collect();
+    let mut luid: Option<String> = None;
+    let mut phys: Option<String> = None;
+    let mut eng: Option<String> = None;
+    let mut i = 0;
+    while i < parts.len() {
+        match parts[i] {
+            "luid" if i + 2 < parts.len() => {
+                luid = Some(format!("{}_{}", parts[i + 1], parts[i + 2]));
+                i += 2;
             }
-
-            let mut hcounter = PDH_HCOUNTER::default();
-            let ret = unsafe {
-                PdhAddEnglishCounterW(hquery, GPU_UTIL_COUNTER, 0, &mut hcounter)
-            };
-            if ret != 0 {
-                unsafe {
-                    let _ = PdhCloseQuery(hquery);
-                }
-                return Err(io::Error::other(format!(
-                    "Counter not available (GPU counter missing on this system): 0x{:08X}",
-                    ret
-                )));
+            "phys" if i + 1 < parts.len() => {
+                phys = Some(parts[i + 1].to_string());
+                i += 1;
             }
-
-            // Prime the query: the first collect initializes the counters,
-            // so the first real sample has a baseline.
-            unsafe {
-                let _ = PdhCollectQueryData(hquery);
-            };
-
-            *state = Some(GpuPdhState { hquery, hcounter });
+            "eng" if i + 1 < parts.len() => {
+                eng = Some(parts[i + 1].to_string());
+                i += 1;
+            }
+            "pid" | "engtype" => {}
+            _ => {}
         }
+        i += 1;
+    }
 
-        let state = state.as_ref().expect("state checked above");
-        let ret = unsafe { PdhCollectQueryData(state.hquery) };
-        if ret == PDH_MORE_DATA {
-            return Err(io::Error::other("PDH data not ready yet"));
-        }
+    let gpu_id = luid.clone().unwrap_or_else(|| "default".to_string());
+    let gpu_label = phys
+        .as_ref()
+        .map(|p| format!("GPU {p}"))
+        .unwrap_or_else(|| "GPU".to_string());
+    let engine_key = match (&luid, &phys, &eng) {
+        (Some(l), Some(p), Some(e)) => format!("{l}/{p}/{e}"),
+        _ => name.to_string(),
+    };
+    (gpu_id, gpu_label, engine_key)
+}
+
+/// Read a NUL-terminated UTF-16 string from a PDH item name pointer.
+unsafe fn read_item_name(ptr: PWSTR) -> Option<String> {
+    let start = ptr.as_ptr();
+    if start.is_null() {
+        return None;
+    }
+    let len = (0..4096).take_while(|&n| unsafe { *start.add(n) } != 0).count();
+    if len == 0 {
+        return None;
+    }
+    Some(unsafe { String::from_utf16_lossy(std::slice::from_raw_parts(start, len)) })
+}
+
+/// Open (or reuse) the PDH query and collect one sample of every
+/// (process, engine) instance.
+fn collect_instances() -> io::Result<Vec<EngineInstance>> {
+    let mut state = GPU_STATE.lock().unwrap();
+    if state.is_none() {
+        let mut hquery = PDH_HQUERY::default();
+        let ret = unsafe { PdhOpenQueryW(None::<&PCWSTR>, 0, &mut hquery) };
         if ret != 0 {
             return Err(io::Error::other(format!(
-                "PdhCollectQueryData failed: 0x{:08X}",
+                "PdhOpenQueryW failed: 0x{:08X}",
                 ret
             )));
         }
 
-        // Wildcard counters expand into one instance per engine; the array
-        // API returns them all in one call (two-pass buffer query).
-        let mut size: u32 = 0;
-        let mut count: u32 = 0;
-        let ret = unsafe {
-            PdhGetFormattedCounterArrayW(state.hcounter, PDH_FMT_DOUBLE, &mut size, &mut count, None)
-        };
-        if ret == PDH_MORE_DATA && count > 0 {
-            let item_size = std::mem::size_of::<PDH_FMT_COUNTERVALUE_ITEM_W>();
-            let item_count = (size as usize) / item_size;
-            let mut items: Vec<PDH_FMT_COUNTERVALUE_ITEM_W> = (0..item_count)
-                .map(|_| PDH_FMT_COUNTERVALUE_ITEM_W::default())
-                .collect();
-            let ret = unsafe {
-                PdhGetFormattedCounterArrayW(
-                    state.hcounter,
-                    PDH_FMT_DOUBLE,
-                    &mut size,
-                    &mut count,
-                    Some(items.as_mut_ptr()),
-                )
-            };
-            if ret == 0 {
-                let mut max: Option<f64> = None;
-                for item in items.iter() {
-                    // PDH_CSTATUS_SUCCESS == 0; skip engines with no data.
-                    if item.FmtValue.CStatus == 0 {
-                        let v = unsafe { item.FmtValue.Anonymous.doubleValue };
-                        max = Some(max.map_or(v, |m| m.max(v)));
-                    }
-                }
-                return max
-                    .ok_or_else(|| io::Error::other("No GPU engine utilization data available"));
+        let mut hcounter = PDH_HCOUNTER::default();
+        let ret = unsafe { PdhAddEnglishCounterW(hquery, GPU_UTIL_COUNTER, 0, &mut hcounter) };
+        if ret != 0 {
+            unsafe {
+                let _ = PdhCloseQuery(hquery);
             }
-            Err(io::Error::other(format!(
-                "PdhGetFormattedCounterArrayW failed: 0x{:08X}",
+            return Err(io::Error::other(format!(
+                "Counter not available (GPU counter missing on this system): 0x{:08X}",
                 ret
-            )))
-        } else if ret == 0 {
-            // Single-instance counter (no wildcard expansion).
-            let mut status: u32 = 0;
-            let mut value = PDH_FMT_COUNTERVALUE::default();
-            let ret = unsafe {
-                PdhGetFormattedCounterValue(
-                    state.hcounter,
-                    PDH_FMT_DOUBLE,
-                    Some(&mut status),
-                    &mut value,
-                )
-            };
-            if ret == 0 && status == 0 {
-                return Ok(unsafe { value.Anonymous.doubleValue });
-            }
-            Err(io::Error::other(format!(
-                "PdhGetFormattedCounterValue failed: 0x{:08X} (status: {})",
-                ret, status
-            )))
-        } else {
-            Err(io::Error::other(format!(
-                "PdhGetFormattedCounterArrayW unexpected status: 0x{:08X}",
-                ret
-            )))
+            )));
         }
+
+        // Prime the query: the first collect initializes the counters,
+        // so the first real sample has a baseline.
+        unsafe {
+            let _ = PdhCollectQueryData(hquery);
+        };
+
+        *state = Some(GpuPdhState { hquery, hcounter });
+    }
+
+    let state = state.as_ref().expect("state checked above");
+    let ret = unsafe { PdhCollectQueryData(state.hquery) };
+    if ret == PDH_MORE_DATA {
+        return Err(io::Error::other("PDH data not ready yet"));
+    }
+    if ret != 0 {
+        return Err(io::Error::other(format!(
+            "PdhCollectQueryData failed: 0x{:08X}",
+            ret
+        )));
+    }
+
+    // Wildcard counters expand into one instance per (process, engine);
+    // the array API returns them all in one call. The first pass yields
+    // the exact buffer size (struct array + trailing name storage), so
+    // allocate `size` bytes and read exactly `count` items.
+    let mut size: u32 = 0;
+    let mut count: u32 = 0;
+    let ret = unsafe {
+        PdhGetFormattedCounterArrayW(state.hcounter, PDH_FMT_DOUBLE, &mut size, &mut count, None)
+    };
+    if ret == PDH_MORE_DATA && count > 0 {
+        let mut buf: Vec<u8> = vec![0u8; size as usize];
+        let ret = unsafe {
+            PdhGetFormattedCounterArrayW(
+                state.hcounter,
+                PDH_FMT_DOUBLE,
+                &mut size,
+                &mut count,
+                Some(buf.as_mut_ptr().cast()),
+            )
+        };
+        if ret == 0 {
+            let items = unsafe {
+                std::slice::from_raw_parts(buf.as_ptr().cast::<PDH_FMT_COUNTERVALUE_ITEM_W>(), count as usize)
+            };
+            let mut instances = Vec::new();
+            for item in items {
+                // PDH_CSTATUS_SUCCESS == 0; skip instances with no data.
+                if item.FmtValue.CStatus != 0 {
+                    continue;
+                }
+                let name = match unsafe { read_item_name(item.szName) } {
+                    Some(n) => n,
+                    None => continue,
+                };
+                let (gpu_id, gpu_label, engine_key) = parse_instance_name(&name);
+                instances.push(EngineInstance {
+                    gpu_id,
+                    gpu_label,
+                    engine_key,
+                    value: unsafe { item.FmtValue.Anonymous.doubleValue },
+                });
+            }
+            return Ok(instances);
+        }
+        Err(io::Error::other(format!(
+            "PdhGetFormattedCounterArrayW failed: 0x{:08X}",
+            ret
+        )))
+    } else if ret == 0 {
+        // Single-instance counter (no wildcard expansion).
+        let mut status: u32 = 0;
+        let mut value = windows::Win32::System::Performance::PDH_FMT_COUNTERVALUE::default();
+        let ret = unsafe {
+            PdhGetFormattedCounterValue(
+                state.hcounter,
+                PDH_FMT_DOUBLE,
+                Some(&mut status),
+                &mut value,
+            )
+        };
+        if ret == 0 && status == 0 {
+            return Ok(vec![EngineInstance {
+                gpu_id: "default".to_string(),
+                gpu_label: "GPU".to_string(),
+                engine_key: "default/default/0".to_string(),
+                value: unsafe { value.Anonymous.doubleValue },
+            }]);
+        }
+        Err(io::Error::other(format!(
+            "PdhGetFormattedCounterValue failed: 0x{:08X} (status: {})",
+            ret, status
+        )))
+    } else {
+        Err(io::Error::other(format!(
+            "PdhGetFormattedCounterArrayW unexpected status: 0x{:08X}",
+            ret
+        )))
+    }
+}
+
+/// Sum per-process instances per physical engine (capped at 100%) and
+/// return the max across engines for the requested GPU scope.
+fn aggregate(instances: &[EngineInstance], scope: Option<&str>) -> io::Result<f64> {
+    let mut engines: BTreeMap<(String, String), f64> = BTreeMap::new();
+    let mut scoped = false;
+    for inst in instances {
+        if let Some(scope) = scope {
+            if inst.gpu_id != scope {
+                continue;
+            }
+        }
+        scoped = true;
+        let entry = engines
+            .entry((inst.gpu_id.clone(), inst.engine_key.clone()))
+            .or_insert(0.0);
+        *entry = (*entry + inst.value).min(100.0);
+    }
+    if !scoped {
+        return Err(io::Error::other(
+            "Selected GPU device no longer exists (fall back to all GPUs)",
+        ));
+    }
+    engines
+        .values()
+        .copied()
+        .max_by(f64::total_cmp)
+        .ok_or_else(|| io::Error::other("No GPU engine utilization data available"))
+}
+
+impl GpuMonitor for WindowsGpuMonitor {
+    fn enumerate_gpus() -> Vec<GpuDevice> {
+        let instances = match collect_instances() {
+            Ok(i) => i,
+            Err(_) => return Vec::new(),
+        };
+        let mut seen: BTreeMap<String, String> = BTreeMap::new();
+        for inst in &instances {
+            seen.entry(inst.gpu_id.clone())
+                .or_insert_with(|| inst.gpu_label.clone());
+        }
+        seen
+            .into_iter()
+            .map(|(id, name)| GpuDevice { id, name })
+            .collect()
+    }
+
+    fn get_gpu_usage(scope: Option<&str>) -> io::Result<f64> {
+        let instances = collect_instances()?;
+        aggregate(&instances, scope)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_name_full() {
+        let (gpu_id, gpu_label, engine_key) =
+            parse_instance_name("pid_10584_luid_0x00000000_0x00017FEA_phys_0_eng_0_engtype_3D");
+        assert_eq!(gpu_id, "0x00000000_0x00017FEA");
+        assert_eq!(gpu_label, "GPU 0");
+        assert_eq!(engine_key, "0x00000000_0x00017FEA/0/0");
+    }
+
+    #[test]
+    fn parse_name_engtype_with_spaces() {
+        let (gpu_id, _label, engine_key) =
+            parse_instance_name("pid_1_luid_0x1_0x2_phys_0_eng_10_engtype_Video Codec 0");
+        assert_eq!(gpu_id, "0x1_0x2");
+        // engtype is free text after the "engtype_" marker; the key is
+        // luid/phys/eng and must not include it.
+        assert_eq!(engine_key, "0x1_0x2/0/10");
+    }
+
+    #[test]
+    fn parse_name_degenerate() {
+        let (gpu_id, _label, engine_key) = parse_instance_name("3D 0");
+        assert_eq!(gpu_id, "default");
+        assert_eq!(engine_key, "3D 0");
+    }
+
+    #[test]
+    fn aggregate_sums_per_engine_and_maxes() {
+        let inst = |_pid: &str, eng: &str, v: f64| EngineInstance {
+            gpu_id: "g".into(),
+            gpu_label: "GPU 0".into(),
+            engine_key: eng.into(),
+            value: v,
+        };
+        let instances = vec![
+            inst("1", "e0", 35.0),
+            inst("2", "e0", 45.0), // same engine, second process → 80
+            inst("1", "e1", 10.0), // other engine, must not win
+        ];
+        let v = aggregate(&instances, None).unwrap();
+        assert_eq!(v, 80.0);
+
+        // Sum is capped at 100.
+        let capped = vec![EngineInstance {
+            gpu_id: "g".into(),
+            gpu_label: "GPU 0".into(),
+            engine_key: "e0".into(),
+            value: 60.0,
+        }];
+        let mut instances = capped.clone();
+        instances.push(capped[0].clone());
+        assert_eq!(aggregate(&instances, None).unwrap(), 100.0);
+
+        // Scope filters by GPU id (the 60% instance of the other GPU is
+        // ignored).
+        let mut other = inst("1", "e9", 50.0);
+        other.gpu_id = "other".into();
+        let mut instances = capped;
+        instances.push(other);
+        assert_eq!(aggregate(&instances, Some("g")).unwrap(), 60.0);
+        assert!(aggregate(&instances, Some("missing")).is_err());
     }
 }

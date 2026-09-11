@@ -54,8 +54,12 @@ impl AnimationSource {
 /// Sample CPU and/or GPU usage depending on the selected source.
 ///
 /// A `None` component means it was not sampled (the source does not need it)
-/// or the read failed.
-fn sample_usage(source: AnimationSource) -> (Option<f64>, Option<f64>) {
+/// or the read failed. `gpu_scope` limits GPU sampling to one device
+/// (`None` = all devices, max across devices).
+fn sample_usage(
+    source: AnimationSource,
+    gpu_scope: Option<&str>,
+) -> (Option<f64>, Option<f64>) {
     let cpu = match source {
         AnimationSource::Gpu => None,
         _ => CpuMonitorImpl::get_cpu_usage()
@@ -64,7 +68,7 @@ fn sample_usage(source: AnimationSource) -> (Option<f64>, Option<f64>) {
     };
     let gpu = match source {
         AnimationSource::Cpu => None,
-        _ => GpuMonitorImpl::get_gpu_usage()
+        _ => GpuMonitorImpl::get_gpu_usage(gpu_scope)
             .map_err(|e| eprintln!("Failed to get GPU usage: {}", e))
             .ok(),
     };
@@ -125,6 +129,8 @@ pub struct App {
     icon_name: Arc<Mutex<String>>,
     theme: Arc<Mutex<Theme>>,
     animation_source: Arc<Mutex<AnimationSource>>,
+    /// Selected GPU device id; `None` = all GPUs.
+    gpu_scope: Arc<Mutex<Option<String>>>,
 }
 
 impl App {
@@ -139,6 +145,7 @@ impl App {
 
         let theme = initial_theme.unwrap_or_else(SettingsManagerImpl::get_current_theme);
         let animation_source = SettingsManagerImpl::get_animation_source();
+        let gpu_scope = SettingsManagerImpl::get_gpu_scope();
         let initial_icons = icon_manager
             .get_icon_set(initial_icon, Some(theme))
             .ok_or("Invalid initial icon name")?;
@@ -162,6 +169,7 @@ impl App {
             icon_name: Arc::new(Mutex::new(initial_icon.to_string())),
             theme: Arc::new(Mutex::new(theme)),
             animation_source: Arc::new(Mutex::new(animation_source)),
+            gpu_scope: Arc::new(Mutex::new(gpu_scope)),
         })
     }
 
@@ -172,6 +180,7 @@ impl App {
         let icon_name = self.icon_name.clone();
         let theme = self.theme.clone();
         let animation_source = self.animation_source.clone();
+        let gpu_scope = self.gpu_scope.clone();
 
         thread::spawn(move || {
             let sleep_interval = 10;
@@ -226,7 +235,19 @@ impl App {
                 if update_counter >= 1000 {
                     update_counter = 0;
                     let source = *animation_source.lock().unwrap();
-                    let (cpu_usage, gpu_usage) = sample_usage(source);
+                    let scope = gpu_scope.lock().unwrap().clone();
+                    let (cpu_usage, gpu_usage) = sample_usage(source, scope.as_deref());
+                    if gpu_usage.is_none() {
+                        if let Some(scope) = &scope {
+                            // The scoped device may have disappeared (e.g. an
+                            // eGPU unplugged); fall back to all GPUs. Only
+                            // heal when enumeration itself succeeded.
+                            let gpus = GpuMonitorImpl::enumerate_gpus();
+                            if !gpus.is_empty() && !gpus.iter().any(|d| &d.id == scope) {
+                                *gpu_scope.lock().unwrap() = None;
+                            }
+                        }
+                    }
                     let usage = effective_usage(source, cpu_usage, gpu_usage);
 
                     if let Some(usage) = usage {
@@ -331,6 +352,11 @@ impl App {
                     Events::SetAnimationSource(source) => {
                         SettingsManagerImpl::set_animation_source(source);
                         *self.animation_source.lock().unwrap() = source;
+                        self.update_menu();
+                    }
+                    Events::SetGpuScope(scope) => {
+                        SettingsManagerImpl::set_gpu_scope(scope.clone());
+                        *self.gpu_scope.lock().unwrap() = scope;
                         self.update_menu();
                     }
                     Events::ToggleRunOnStart => {

@@ -46,6 +46,17 @@ impl SettingsManager for MacosSettingsManager {
         set_preference("AnimationSource", source.as_str());
     }
 
+    fn get_gpu_scope() -> Option<String> {
+        get_preference("GpuScope").filter(|s| !s.is_empty())
+    }
+
+    fn set_gpu_scope(scope: Option<String>) {
+        match scope {
+            Some(scope) => set_preference("GpuScope", &scope),
+            None => remove_preference("GpuScope"),
+        }
+    }
+
     fn is_run_on_start_enabled() -> bool {
         let plist_path = dirs::home_dir()
             .unwrap_or_else(|| PathBuf::from("/tmp"))
